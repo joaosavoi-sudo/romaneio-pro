@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'DM Sans', sans-serif;
+  --color-primary-50: #ecfdf5;
+  --color-primary-100: #d1fae5;
+  --color-primary-200: #a7f3d0;
+  --color-primary-300: #6ee7b7;
+  --color-primary-400: #34d399;
+  --color-primary-500: #10b981;
+  --color-primary-600: #059669;
+  --color-primary-700: #047857;
+  --color-primary-800: #065f46;
+  --color-primary-900: #064e3b;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background-color: #f9fafb;
+  margin: 0;
+}
+
+/* Impressão de etiquetas - 150x100mm paisagem (Elgin L42 Pro com etiquetas grandes) */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .etiqueta {
+    width: 150mm;
+    height: 100mm;
+    page-break-after: always;
+    box-sizing: border-box;
+  }
+  .print-area > .etiqueta:last-child {
+    page-break-after: auto;
+  }
+}
+
+/* Quando usa print-area com etiquetas, usar tamanho de página específico */
+@page etiqueta {
+  size: 150mm 100mm landscape;
+  margin: 0;
+}
+
+.print-area .etiqueta {
+  page: etiqueta;
+}
