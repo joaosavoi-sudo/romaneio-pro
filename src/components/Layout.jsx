@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ClipboardList, ScanLine,
-  Tag, Package, LogOut, Menu, X, FileBarChart
+  Tag, Package, LogOut, Menu, X, FileBarChart, Smartphone
 } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/scanner', icon: ScanLine, label: 'Scanner' },
   { to: '/etiquetas', icon: Tag, label: 'Etiquetas' },
   { to: '/relatorio', icon: FileBarChart, label: 'Relatório' },
+  { to: '/estacao', icon: Smartphone, label: 'Estações Móveis' },
 ]
 
 function SidebarLink({ to, icon: Icon, label, onClick }) {
