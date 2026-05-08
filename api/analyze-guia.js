@@ -9,9 +9,10 @@ const AI_PROMPT_GUIA = `Você analisa uma "Guia Fechada" da Top Móveis (marcena
 Extraia APENAS dados explícitos no documento. NÃO invente.
 Se um campo não aparece, deixe string vazia (""). Para quantidade, use 1 quando não especificada.
 
-Retorne APENAS JSON válido, sem markdown, sem texto extra antes ou depois.
+IMPORTANTE: Sua resposta deve começar EXATAMENTE com "{" e terminar EXATAMENTE com "}".
+NÃO inclua texto explicativo antes ou depois. NÃO use blocos markdown \`\`\`json. APENAS JSON puro.
 
-Schema esperado:
+Schema obrigatório:
 {
   "obra": {
     "numero_guia": "695-2025",
@@ -23,64 +24,89 @@ Schema esperado:
     {
       "codigo": "17.1",
       "ambiente": "Hall",
-      "nome": "descrição resumida em uma linha curta",
-      "descricao": "descrição completa do item (texto longo)",
+      "nome": "descrição resumida em uma linha curta (max 80 chars)",
+      "descricao": "descrição completa do item",
       "dimensoes": "4,45x2,80m",
-      "acabamento_interno": "Lâmina de madeira carvalho natural...",
-      "acabamento_externo": "Lâmina de madeira carvalho natural...",
-      "incluido": "Pivô, perfil alumínio, fecho magnético oculto...",
-      "nao_incluido": "Sem puxador, ...",
+      "acabamento_interno": "...",
+      "acabamento_externo": "...",
+      "incluido": "...",
+      "nao_incluido": "...",
       "quantidade": 1,
       "observacoes": "...",
-      "projeto_recebido": "05/01/2026 - 2025_12_30_JP_DET.MARCENARIA_R00"
+      "projeto_recebido": "data + nome do arquivo do arquiteto"
     }
   ]
 }
 
-Regras importantes:
-- "endereco" da obra é onde os móveis serão instalados (NUNCA o endereço do escritório do cliente ou da Top Móveis)
-- "codigo" é o número do item da guia (ex: "17.1", "17.2", "18.1")
-- "nome" deve ser CURTO (até ~80 caracteres), uma linha
-- "descricao" pode ser longa (texto completo do item)
-- IGNORE valores monetários (R$). Não capture valor unitário ou total.
-- "projeto_recebido" combina a data com o nome do arquivo do arquiteto, se ambos aparecerem
-- Inclua TODOS os móveis listados, mesmo que repitam ambiente`
+Regras:
+- "endereco" da obra = onde os móveis serão instalados (NUNCA o do escritório)
+- "codigo" = número do item (ex: "17.1", "17.2")
+- "nome" CURTO. "descricao" pode ser longo.
+- IGNORE valores monetários (R$).
+- Inclua TODOS os móveis da guia.
+- Para textos longos, use \\n (quebra de linha escapada) em vez de quebrar a string JSON.`
 
-function extractSheetsId(url) {
-  const match = (url || '').match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)
-  return match ? match[1] : null
-}
-
-async function fetchSheetsCsv(sheetsUrl) {
-  const id = extractSheetsId(sheetsUrl)
-  if (!id) throw new Error('URL do Google Sheets inválida')
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`
-  const res = await fetch(csvUrl, { redirect: 'follow' })
-  if (!res.ok) {
-    throw new Error(`Não consegui acessar o Sheets (${res.status}). Confira se está público (Compartilhar → "Qualquer pessoa com o link").`)
+// Tenta consertar JSON truncado contando braces/brackets abertos e fechando-os
+function tryRepairTruncated(text) {
+  let depthObj = 0
+  let depthArr = 0
+  let inString = false
+  let escape = false
+  for (const ch of text) {
+    if (escape) { escape = false; continue }
+    if (ch === '\\') { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') depthObj++
+    else if (ch === '}') depthObj--
+    else if (ch === '[') depthArr++
+    else if (ch === ']') depthArr--
   }
-  return await res.text()
+  // Cortar string aberta no fim, se houver
+  let repaired = text
+  if (inString) {
+    const lastQuote = repaired.lastIndexOf('"')
+    if (lastQuote >= 0) repaired = repaired.substring(0, lastQuote) + '"'
+  }
+  // Remover vírgula trailing antes de fechar
+  repaired = repaired.replace(/,\s*$/, '')
+  // Fechar arrays/objetos abertos
+  repaired += ']'.repeat(Math.max(0, depthArr))
+  repaired += '}'.repeat(Math.max(0, depthObj))
+  return repaired
 }
 
 function parseAIResponse(text) {
-  // Remove markdown ```json ... ```
   let cleaned = text.trim()
+
+  // Remove markdown ```json ... ```
   const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
   if (fence) cleaned = fence[1].trim()
 
-  try {
-    return JSON.parse(cleaned)
-  } catch {
-    // Tentar achar primeiro { e último } válido
-    const firstBrace = cleaned.indexOf('{')
-    const lastBrace = cleaned.lastIndexOf('}')
-    if (firstBrace >= 0 && lastBrace > firstBrace) {
-      try {
-        return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1))
-      } catch {}
-    }
-    throw new Error('IA retornou JSON inválido. Tente novamente.')
+  // 1. Tentar JSON puro
+  try { return JSON.parse(cleaned) } catch {}
+
+  // 2. Cortar entre primeiro { e último }
+  const firstBrace = cleaned.indexOf('{')
+  const lastBrace = cleaned.lastIndexOf('}')
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const subset = cleaned.substring(firstBrace, lastBrace + 1)
+    try { return JSON.parse(subset) } catch {}
   }
+
+  // 3. JSON truncado? Tentar reparar fechando braces/brackets
+  if (firstBrace >= 0) {
+    const fromBrace = cleaned.substring(firstBrace)
+    const repaired = tryRepairTruncated(fromBrace)
+    try { return JSON.parse(repaired) } catch {}
+  }
+
+  // Falha: lança erro com snippet pra debug
+  const snippet = cleaned.substring(0, 500)
+  const err = new Error('JSON inválido')
+  err.snippet = snippet
+  err.fullLength = cleaned.length
+  throw err
 }
 
 export default async function handler(req, res) {
@@ -97,7 +123,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { source, pdf_base64, sheets_url } = req.body || {}
+    const { source, pdf_base64, csv_content } = req.body || {}
 
     let userContent
     if (source === 'pdf') {
@@ -111,21 +137,21 @@ export default async function handler(req, res) {
         },
         { type: 'text', text: AI_PROMPT_GUIA },
       ]
-    } else if (source === 'sheets') {
-      if (!sheets_url) {
-        return res.status(400).json({ success: false, error: 'sheets_url ausente' })
+    } else if (source === 'csv') {
+      if (!csv_content || typeof csv_content !== 'string') {
+        return res.status(400).json({ success: false, error: 'csv_content ausente' })
       }
-      const csv = await fetchSheetsCsv(sheets_url)
+      console.log(`[analyze-guia] CSV recebido: ${csv_content.length} chars`)
       userContent = [
         {
           type: 'text',
-          text: `${AI_PROMPT_GUIA}\n\nCONTEÚDO DA PLANILHA (CSV):\n\n${csv}`,
+          text: `${AI_PROMPT_GUIA}\n\nCONTEÚDO DA PLANILHA (CSV):\n\n${csv_content}`,
         },
       ]
     } else {
       return res.status(400).json({
         success: false,
-        error: 'source deve ser "pdf" ou "sheets"',
+        error: 'source deve ser "pdf" ou "csv"',
       })
     }
 
@@ -142,7 +168,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 8192,
+        max_tokens: 16384,
         messages: [{ role: 'user', content: userContent }],
       }),
     }).finally(() => clearTimeout(timer))
@@ -155,16 +181,43 @@ export default async function handler(req, res) {
           : anthropicRes.status === 429
             ? 'Limite de requisições atingido. Tente em alguns minutos.'
             : errBody?.error?.message || `Erro Anthropic ${anthropicRes.status}`
+      console.error('[analyze-guia] Anthropic error:', anthropicRes.status, errBody)
       return res.status(500).json({ success: false, error: msg })
     }
 
     const json = await anthropicRes.json()
     const text = json?.content?.[0]?.text
+    const stopReason = json?.stop_reason
+    const usage = json?.usage
+
+    console.log(`[analyze-guia] Resposta IA - stop_reason: ${stopReason}, output_tokens: ${usage?.output_tokens}, length: ${text?.length}`)
+    console.log(`[analyze-guia] Início da resposta: ${text?.substring(0, 200)}`)
+    console.log(`[analyze-guia] Fim da resposta: ...${text?.substring(Math.max(0, (text?.length || 0) - 200))}`)
+
     if (!text) {
       return res.status(500).json({ success: false, error: 'Resposta vazia da IA' })
     }
 
-    const data = parseAIResponse(text)
+    let data
+    try {
+      data = parseAIResponse(text)
+    } catch (parseErr) {
+      console.error('[analyze-guia] Parse falhou. Snippet:', parseErr.snippet)
+      console.error('[analyze-guia] Full length:', parseErr.fullLength, 'stop_reason:', stopReason)
+      const hint = stopReason === 'max_tokens'
+        ? ' A resposta foi cortada por atingir o limite de tokens. Tente novamente.'
+        : ''
+      return res.status(500).json({
+        success: false,
+        error: `IA retornou JSON inválido.${hint}`,
+        debug: {
+          stopReason,
+          outputTokens: usage?.output_tokens,
+          snippet: parseErr.snippet,
+          fullLength: parseErr.fullLength,
+        },
+      })
+    }
 
     // Validação básica
     if (!data?.obra) {
@@ -180,6 +233,7 @@ export default async function handler(req, res) {
     if (err.name === 'AbortError') {
       return res.status(504).json({ success: false, error: 'Timeout - IA demorou mais de 3 minutos' })
     }
+    console.error('[analyze-guia] Erro:', err)
     return res.status(500).json({ success: false, error: err.message || 'Erro desconhecido' })
   }
 }

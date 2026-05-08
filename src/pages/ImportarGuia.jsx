@@ -1,24 +1,27 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  FileUp, FileText, Sheet, Loader2, ChevronDown, ChevronRight,
+  FileUp, FileText, FileSpreadsheet, Loader2, ChevronDown, ChevronRight,
   CheckCircle2, AlertCircle, Upload, Building2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Btn, Input, Card, CardBody } from '../components/ui'
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024 // 10 MB
+const MAX_CSV_SIZE = 5 * 1024 * 1024  // 5 MB
 
 export default function ImportarGuia() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState('sheets') // sheets | pdf
+  const [tab, setTab] = useState('csv') // csv | pdf
   const [estado, setEstado] = useState('idle') // idle | processing | review
   const [erro, setErro] = useState('')
+  const [debug, setDebug] = useState(null)
 
   // inputs
-  const [sheetsUrl, setSheetsUrl] = useState('')
+  const [csvFile, setCsvFile] = useState(null)
   const [pdfFile, setPdfFile] = useState(null)
   const fileInputRef = useRef()
+  const csvInputRef = useRef()
 
   // dados extraídos (review)
   const [obra, setObra] = useState(null)
@@ -28,10 +31,10 @@ export default function ImportarGuia() {
   // import progress
   const [importando, setImportando] = useState(false)
 
-  function handleFileSelect(e) {
+  function handlePdfSelect(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.includes('pdf')) {
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
       setErro('Por favor selecione um arquivo PDF')
       return
     }
@@ -43,16 +46,35 @@ export default function ImportarGuia() {
     setErro('')
   }
 
-  function handleDrop(e) {
-    e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (file) {
-      const fakeEvent = { target: { files: [file] } }
-      handleFileSelect(fakeEvent)
+  function handleCsvSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isCsv = file.type.includes('csv') || file.type.includes('text') || file.name.toLowerCase().endsWith('.csv')
+    if (!isCsv) {
+      setErro('Por favor selecione um arquivo CSV')
+      return
     }
+    if (file.size > MAX_CSV_SIZE) {
+      setErro(`CSV muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máx 5MB.`)
+      return
+    }
+    setCsvFile(file)
+    setErro('')
   }
 
-  async function fileToBase64(file) {
+  function handleDropPdf(e) {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handlePdfSelect({ target: { files: [file] } })
+  }
+
+  function handleDropCsv(e) {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleCsvSelect({ target: { files: [file] } })
+  }
+
+  function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result.split(',')[1])
@@ -61,8 +83,18 @@ export default function ImportarGuia() {
     })
   }
 
+  function fileToText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsText(file, 'UTF-8')
+    })
+  }
+
   async function analisar() {
     setErro('')
+    setDebug(null)
     setEstado('processing')
 
     try {
@@ -72,12 +104,9 @@ export default function ImportarGuia() {
         const base64 = await fileToBase64(pdfFile)
         body = { source: 'pdf', pdf_base64: base64 }
       } else {
-        if (!sheetsUrl.trim()) { setErro('Cole a URL do Google Sheets'); setEstado('idle'); return }
-        if (!/spreadsheets\/d\//.test(sheetsUrl)) {
-          setErro('URL inválida. Cole a URL completa do Google Sheets.')
-          setEstado('idle'); return
-        }
-        body = { source: 'sheets', sheets_url: sheetsUrl.trim() }
+        if (!csvFile) { setErro('Selecione um arquivo CSV'); setEstado('idle'); return }
+        const text = await fileToText(csvFile)
+        body = { source: 'csv', csv_content: text }
       }
 
       const res = await fetch('/api/analyze-guia', {
@@ -89,6 +118,7 @@ export default function ImportarGuia() {
 
       if (!json.success) {
         setErro(json.error || 'Erro ao analisar a guia')
+        if (json.debug) setDebug(json.debug)
         setEstado('idle')
         return
       }
@@ -320,21 +350,21 @@ export default function ImportarGuia() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Importar Guia Fechada</h2>
         <p className="text-sm text-gray-500">
-          Cole a URL do Google Sheets ou faça upload do PDF da guia. A IA vai extrair a obra e os móveis automaticamente.
+          Faça upload de um CSV (exportado do Sheets) ou do PDF da guia. A IA vai extrair a obra e os móveis automaticamente.
         </p>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4 border-b border-gray-200">
         <button
-          onClick={() => setTab('sheets')}
+          onClick={() => setTab('csv')}
           className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px cursor-pointer ${
-            tab === 'sheets'
+            tab === 'csv'
               ? 'border-primary-600 text-primary-700'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          <Sheet size={16} className="inline mr-1.5 -mt-0.5" /> Google Sheets
+          <FileSpreadsheet size={16} className="inline mr-1.5 -mt-0.5" /> Upload CSV
         </button>
         <button
           onClick={() => setTab('pdf')}
@@ -349,31 +379,74 @@ export default function ImportarGuia() {
       </div>
 
       {erro && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
-          <AlertCircle size={16} /> {erro}
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertCircle size={16} /> {erro}
+          </div>
+          {debug && (
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer hover:underline">Ver detalhes técnicos</summary>
+              <div className="mt-2 space-y-1 font-mono">
+                {debug.stopReason && <div><strong>stop_reason:</strong> {debug.stopReason}</div>}
+                {debug.outputTokens && <div><strong>output_tokens:</strong> {debug.outputTokens}</div>}
+                {debug.fullLength && <div><strong>length:</strong> {debug.fullLength}</div>}
+                {debug.snippet && (
+                  <div>
+                    <strong>Início da resposta da IA:</strong>
+                    <pre className="mt-1 p-2 bg-white border border-red-200 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                      {debug.snippet}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
         </div>
       )}
 
       <Card>
         <CardBody>
-          {tab === 'sheets' ? (
+          {tab === 'csv' ? (
             <div>
-              <Input
-                label="URL do Google Sheets"
-                value={sheetsUrl}
-                onChange={e => setSheetsUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                disabled={estado === 'processing'}
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                A planilha precisa estar com compartilhamento <strong>"Qualquer pessoa com o link"</strong> para a IA conseguir ler.
-              </p>
+              <div
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleDropCsv}
+                onClick={() => csvInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-colors"
+              >
+                <Upload size={32} className="mx-auto text-gray-400 mb-2" />
+                {csvFile ? (
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{csvFile.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {(csvFile.size / 1024).toFixed(1)} KB · clique para trocar
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-700 font-medium">
+                      Arraste o CSV aqui ou clique para selecionar
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">CSV · máximo 5 MB</p>
+                  </>
+                )}
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleCsvSelect}
+                  className="hidden"
+                />
+              </div>
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                <strong>Como exportar do Google Sheets:</strong> abra a planilha → <em>Arquivo</em> → <em>Fazer download</em> → <em>Valores separados por vírgula (.csv)</em> → faça upload aqui.
+              </div>
             </div>
           ) : (
             <div>
               <div
                 onDragOver={e => e.preventDefault()}
-                onDrop={handleDrop}
+                onDrop={handleDropPdf}
                 onClick={() => fileInputRef.current?.click()}
                 className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-colors"
               >
@@ -397,7 +470,7 @@ export default function ImportarGuia() {
                   ref={fileInputRef}
                   type="file"
                   accept=".pdf,application/pdf"
-                  onChange={handleFileSelect}
+                  onChange={handlePdfSelect}
                   className="hidden"
                 />
               </div>
@@ -407,7 +480,7 @@ export default function ImportarGuia() {
           <div className="mt-4 flex justify-end">
             <Btn
               onClick={analisar}
-              disabled={estado === 'processing' || (tab === 'pdf' && !pdfFile) || (tab === 'sheets' && !sheetsUrl.trim())}
+              disabled={estado === 'processing' || (tab === 'pdf' && !pdfFile) || (tab === 'csv' && !csvFile)}
               size="lg"
             >
               {estado === 'processing' ? (
