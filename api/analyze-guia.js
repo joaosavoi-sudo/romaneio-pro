@@ -123,37 +123,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { source, pdf_base64, csv_content } = req.body || {}
+    const { csv_content } = req.body || {}
 
-    let userContent
-    if (source === 'pdf') {
-      if (!pdf_base64) {
-        return res.status(400).json({ success: false, error: 'pdf_base64 ausente' })
-      }
-      userContent = [
-        {
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: pdf_base64 },
-        },
-        { type: 'text', text: AI_PROMPT_GUIA },
-      ]
-    } else if (source === 'csv') {
-      if (!csv_content || typeof csv_content !== 'string') {
-        return res.status(400).json({ success: false, error: 'csv_content ausente' })
-      }
-      console.log(`[analyze-guia] CSV recebido: ${csv_content.length} chars`)
-      userContent = [
-        {
-          type: 'text',
-          text: `${AI_PROMPT_GUIA}\n\nCONTEÚDO DA PLANILHA (CSV):\n\n${csv_content}`,
-        },
-      ]
-    } else {
+    if (!csv_content || typeof csv_content !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'source deve ser "pdf" ou "csv"',
+        error: 'csv_content ausente. Envie o conteúdo CSV/TSV no body.',
       })
     }
+
+    console.log(`[analyze-guia] Tabela recebida: ${csv_content.length} chars`)
+
+    const userContent = [
+      {
+        type: 'text',
+        text: `${AI_PROMPT_GUIA}\n\nCONTEÚDO DA TABELA:\n\n${csv_content}`,
+      },
+    ]
 
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 175000)

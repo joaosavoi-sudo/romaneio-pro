@@ -1,27 +1,23 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  FileUp, FileText, FileSpreadsheet, Loader2, ChevronDown, ChevronRight,
+  FileUp, Loader2, ChevronDown, ChevronRight,
   CheckCircle2, AlertCircle, Upload, Building2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Btn, Input, Card, CardBody } from '../components/ui'
 
-const MAX_PDF_SIZE = 10 * 1024 * 1024 // 10 MB
-const MAX_CSV_SIZE = 5 * 1024 * 1024  // 5 MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 
 export default function ImportarGuia() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState('csv') // csv | pdf
   const [estado, setEstado] = useState('idle') // idle | processing | review
   const [erro, setErro] = useState('')
   const [debug, setDebug] = useState(null)
 
-  // inputs
-  const [csvFile, setCsvFile] = useState(null)
-  const [pdfFile, setPdfFile] = useState(null)
+  // input
+  const [file, setFile] = useState(null)
   const fileInputRef = useRef()
-  const csvInputRef = useRef()
 
   // dados extraídos (review)
   const [obra, setObra] = useState(null)
@@ -31,64 +27,41 @@ export default function ImportarGuia() {
   // import progress
   const [importando, setImportando] = useState(false)
 
-  function handlePdfSelect(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
-      setErro('Por favor selecione um arquivo PDF')
+  function handleFileSelect(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    const lower = f.name.toLowerCase()
+    const isValid =
+      lower.endsWith('.csv') ||
+      lower.endsWith('.tsv') ||
+      lower.endsWith('.txt') ||
+      f.type.includes('csv') ||
+      f.type.includes('tab-separated') ||
+      f.type.includes('text')
+    if (!isValid) {
+      setErro('Por favor selecione um arquivo CSV ou TSV')
       return
     }
-    if (file.size > MAX_PDF_SIZE) {
-      setErro(`PDF muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máx 10MB.`)
+    if (f.size > MAX_FILE_SIZE) {
+      setErro(`Arquivo muito grande (${(f.size / 1024 / 1024).toFixed(1)}MB). Máx 5MB.`)
       return
     }
-    setPdfFile(file)
+    setFile(f)
     setErro('')
   }
 
-  function handleCsvSelect(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const isCsv = file.type.includes('csv') || file.type.includes('text') || file.name.toLowerCase().endsWith('.csv')
-    if (!isCsv) {
-      setErro('Por favor selecione um arquivo CSV')
-      return
-    }
-    if (file.size > MAX_CSV_SIZE) {
-      setErro(`CSV muito grande (${(file.size / 1024 / 1024).toFixed(1)}MB). Máx 5MB.`)
-      return
-    }
-    setCsvFile(file)
-    setErro('')
-  }
-
-  function handleDropPdf(e) {
+  function handleDrop(e) {
     e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (file) handlePdfSelect({ target: { files: [file] } })
+    const f = e.dataTransfer.files?.[0]
+    if (f) handleFileSelect({ target: { files: [f] } })
   }
 
-  function handleDropCsv(e) {
-    e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (file) handleCsvSelect({ target: { files: [file] } })
-  }
-
-  function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result.split(',')[1])
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  }
-
-  function fileToText(file) {
+  function fileToText(f) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result)
       reader.onerror = reject
-      reader.readAsText(file, 'UTF-8')
+      reader.readAsText(f, 'UTF-8')
     })
   }
 
@@ -98,16 +71,9 @@ export default function ImportarGuia() {
     setEstado('processing')
 
     try {
-      let body
-      if (tab === 'pdf') {
-        if (!pdfFile) { setErro('Selecione um PDF'); setEstado('idle'); return }
-        const base64 = await fileToBase64(pdfFile)
-        body = { source: 'pdf', pdf_base64: base64 }
-      } else {
-        if (!csvFile) { setErro('Selecione um arquivo CSV'); setEstado('idle'); return }
-        const text = await fileToText(csvFile)
-        body = { source: 'csv', csv_content: text }
-      }
+      if (!file) { setErro('Selecione um arquivo'); setEstado('idle'); return }
+      const text = await fileToText(file)
+      const body = { source: 'csv', csv_content: text }
 
       const res = await fetch('/api/analyze-guia', {
         method: 'POST',
@@ -350,32 +316,8 @@ export default function ImportarGuia() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Importar Guia Fechada</h2>
         <p className="text-sm text-gray-500">
-          Faça upload de um CSV (exportado do Sheets) ou do PDF da guia. A IA vai extrair a obra e os móveis automaticamente.
+          Faça upload do CSV/TSV exportado da planilha. A IA vai extrair a obra e os móveis automaticamente.
         </p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 mb-4 border-b border-gray-200">
-        <button
-          onClick={() => setTab('csv')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px cursor-pointer ${
-            tab === 'csv'
-              ? 'border-primary-600 text-primary-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <FileSpreadsheet size={16} className="inline mr-1.5 -mt-0.5" /> Upload CSV
-        </button>
-        <button
-          onClick={() => setTab('pdf')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px cursor-pointer ${
-            tab === 'pdf'
-              ? 'border-primary-600 text-primary-700'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <FileText size={16} className="inline mr-1.5 -mt-0.5" /> Upload PDF
-        </button>
       </div>
 
       {erro && (
@@ -406,81 +348,46 @@ export default function ImportarGuia() {
 
       <Card>
         <CardBody>
-          {tab === 'csv' ? (
-            <div>
-              <div
-                onDragOver={e => e.preventDefault()}
-                onDrop={handleDropCsv}
-                onClick={() => csvInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-colors"
-              >
-                <Upload size={32} className="mx-auto text-gray-400 mb-2" />
-                {csvFile ? (
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{csvFile.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {(csvFile.size / 1024).toFixed(1)} KB · clique para trocar
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-700 font-medium">
-                      Arraste o CSV aqui ou clique para selecionar
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">CSV · máximo 5 MB</p>
-                  </>
-                )}
-                <input
-                  ref={csvInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleCsvSelect}
-                  className="hidden"
-                />
+          <div
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-colors"
+          >
+            <Upload size={32} className="mx-auto text-gray-400 mb-2" />
+            {file ? (
+              <div>
+                <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                <p className="text-xs text-gray-500">
+                  {(file.size / 1024).toFixed(1)} KB · clique para trocar
+                </p>
               </div>
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-                <strong>Como exportar do Google Sheets:</strong> abra a planilha → <em>Arquivo</em> → <em>Fazer download</em> → <em>Valores separados por vírgula (.csv)</em> → faça upload aqui.
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div
-                onDragOver={e => e.preventDefault()}
-                onDrop={handleDropPdf}
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-colors"
-              >
-                <Upload size={32} className="mx-auto text-gray-400 mb-2" />
-                {pdfFile ? (
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{pdfFile.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {(pdfFile.size / 1024 / 1024).toFixed(2)} MB · clique para trocar
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-700 font-medium">
-                      Arraste o PDF aqui ou clique para selecionar
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">PDF · máximo 10 MB</p>
-                  </>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={handlePdfSelect}
-                  className="hidden"
-                />
-              </div>
-            </div>
-          )}
+            ) : (
+              <>
+                <p className="text-sm text-gray-700 font-medium">
+                  Arraste o arquivo aqui ou clique para selecionar
+                </p>
+                <p className="text-xs text-gray-500 mt-1">CSV ou TSV · máximo 5 MB</p>
+              </>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          </div>
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 space-y-1">
+            <p><strong>Como exportar do Google Sheets:</strong></p>
+            <p>• <strong>CSV:</strong> Arquivo → Fazer download → <em>Valores separados por vírgula (.csv)</em></p>
+            <p>• <strong>TSV (recomendado):</strong> Arquivo → Fazer download → <em>Valores separados por tabulação (.tsv)</em> — gera arquivo mais limpo</p>
+          </div>
 
           <div className="mt-4 flex justify-end">
             <Btn
               onClick={analisar}
-              disabled={estado === 'processing' || (tab === 'pdf' && !pdfFile) || (tab === 'csv' && !csvFile)}
+              disabled={estado === 'processing' || !file}
               size="lg"
             >
               {estado === 'processing' ? (
