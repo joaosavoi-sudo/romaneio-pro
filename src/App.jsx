@@ -13,6 +13,7 @@ import Etiquetas from './pages/Etiquetas'
 import Relatorio from './pages/Relatorio'
 import EstacaoIndex from './pages/EstacaoIndex'
 import EstacaoScanner from './pages/EstacaoScanner'
+import ImportarGuia from './pages/ImportarGuia'
 
 function ProtectedRoute({ children, user }) {
   if (!user) return <Navigate to="/login" replace />
@@ -41,6 +42,7 @@ export default function App() {
 
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/" element={<ProtectedRoute user={user}><Dashboard /></ProtectedRoute>} />
+      <Route path="/importar" element={<ProtectedRoute user={user}><ImportarGuia /></ProtectedRoute>} />
       <Route path="/obras" element={<ProtectedRoute user={user}><Obras /></ProtectedRoute>} />
       <Route path="/obras/:id" element={<ProtectedRoute user={user}><ObraDetalhe /></ProtectedRoute>} />
       <Route path="/romaneio/:id" element={<ProtectedRoute user={user}><RomaneioEditor /></ProtectedRoute>} />

@@ -11,11 +11,19 @@ node_modules
 dist
 dist-ssr
 *.local
+.vite
 
 # Variáveis de ambiente (NUNCA commitar - contém chaves do Supabase)
 .env
 .env.*
 !.env.example
+
+# Arquivos de modelo/teste com dados reais de cliente (não versionar)
+*MODELO GUIA*.pdf
+*CONTRATO*.pdf
+*.png
+!public/*.png
+!favicons/*.png
 
 # Editor directories and files
 .vscode/*

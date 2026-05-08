@@ -10,7 +10,7 @@ export default function Obras() {
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState({ cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
+  const [form, setForm] = useState({ codigo: '', cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
@@ -28,28 +28,40 @@ export default function Obras() {
   async function handleSave(e) {
     e.preventDefault()
     if (editing) {
-      await supabase.from('obras').update(form).eq('id', editing.id)
+      const { codigo, ...rest } = form
+      const update = codigo?.trim() ? { ...rest, codigo: codigo.trim() } : rest
+      await supabase.from('obras').update(update).eq('id', editing.id)
     } else {
-      const { count } = await supabase.from('obras').select('id', { count: 'exact', head: true })
-      const codigo = gerarCodigo('OBR', (count || 0) + 1)
+      let codigo = form.codigo?.trim()
+      if (!codigo) {
+        const { count } = await supabase.from('obras').select('id', { count: 'exact', head: true })
+        codigo = gerarCodigo('OBR', (count || 0) + 1)
+      }
       const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('obras').insert({ ...form, codigo, user_id: user.id })
+      const { codigo: _, ...rest } = form
+      await supabase.from('obras').insert({ ...rest, codigo, user_id: user.id })
     }
     setModalOpen(false)
     setEditing(null)
-    setForm({ cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
+    setForm({ codigo: '', cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
     loadObras()
   }
 
   function openEdit(obra) {
     setEditing(obra)
-    setForm({ cliente: obra.cliente, endereco: obra.endereco || '', arquiteto: obra.arquiteto || '', status: obra.status })
+    setForm({
+      codigo: obra.codigo || '',
+      cliente: obra.cliente,
+      endereco: obra.endereco || '',
+      arquiteto: obra.arquiteto || '',
+      status: obra.status,
+    })
     setModalOpen(true)
   }
 
   function openNew() {
     setEditing(null)
-    setForm({ cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
+    setForm({ codigo: '', cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
     setModalOpen(true)
   }
 
@@ -147,6 +159,13 @@ export default function Obras() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Obra' : 'Nova Obra'}>
         <form onSubmit={handleSave} className="space-y-4">
+          <Input
+            label="Código (deixe em branco para gerar OBR-XXX)"
+            id="codigo"
+            value={form.codigo}
+            onChange={e => setForm({ ...form, codigo: e.target.value })}
+            placeholder="Ex: 695-2025 ou OBR-001 (auto)"
+          />
           <Input label="Cliente *" id="cliente" value={form.cliente} onChange={e => setForm({ ...form, cliente: e.target.value })} required />
           <Input label="Endereço" id="endereco" value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} />
           <Input label="Arquiteto" id="arquiteto" value={form.arquiteto} onChange={e => setForm({ ...form, arquiteto: e.target.value })} />

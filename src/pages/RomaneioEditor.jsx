@@ -12,24 +12,18 @@ const EMPTY_PECA = {
   movel_id: '',
 }
 
-const EMPTY_MOVEL = { codigo: '', nome: '', ambiente: '' }
-
 export default function RomaneioEditor() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [romaneio, setRomaneio] = useState(null)
   const [obra, setObra] = useState(null)
   const [pecas, setPecas] = useState([])
-  const [moveis, setMoveis] = useState([])
+  const [moveis, setMoveis] = useState([])  // móveis da OBRA (não do romaneio)
   const [loading, setLoading] = useState(true)
 
   const [pecaModalOpen, setPecaModalOpen] = useState(false)
   const [editingPeca, setEditingPeca] = useState(null)
   const [pecaForm, setPecaForm] = useState({ ...EMPTY_PECA })
-
-  const [movelModalOpen, setMovelModalOpen] = useState(false)
-  const [editingMovel, setEditingMovel] = useState(null)
-  const [movelForm, setMovelForm] = useState({ ...EMPTY_MOVEL })
 
   const [obs, setObs] = useState('')
   const [marceneiro, setMarceneiro] = useState('')
@@ -45,13 +39,15 @@ export default function RomaneioEditor() {
       setObs(rom.observacoes || '')
       setMarceneiro(rom.marceneiro || '')
       setResponsavel(rom.responsavel || '')
+
+      // Móveis vêm da obra (não do romaneio)
+      const [pecasRes, moveisRes] = await Promise.all([
+        supabase.from('pecas').select('*, moveis(id, codigo, nome, ambiente)').eq('romaneio_id', id).order('created_at', { ascending: true }),
+        supabase.from('moveis').select('*').eq('obra_id', rom.obras.id).order('codigo', { ascending: true }),
+      ])
+      setPecas(pecasRes.data || [])
+      setMoveis(moveisRes.data || [])
     }
-    const [pecasRes, moveisRes] = await Promise.all([
-      supabase.from('pecas').select('*, moveis(id, codigo, nome, ambiente)').eq('romaneio_id', id).order('created_at', { ascending: true }),
-      supabase.from('moveis').select('*').eq('romaneio_id', id).order('codigo', { ascending: true }),
-    ])
-    setPecas(pecasRes.data || [])
-    setMoveis(moveisRes.data || [])
     setLoading(false)
   }
 
@@ -127,25 +123,6 @@ export default function RomaneioEditor() {
     loadData()
   }
 
-  async function handleSaveMovel(e) {
-    e.preventDefault()
-    if (editingMovel) {
-      await supabase.from('moveis').update(movelForm).eq('id', editingMovel.id)
-    } else {
-      await supabase.from('moveis').insert({ ...movelForm, romaneio_id: id })
-    }
-    setMovelModalOpen(false)
-    setEditingMovel(null)
-    setMovelForm({ ...EMPTY_MOVEL })
-    loadData()
-  }
-
-  async function deleteMovel(movelId) {
-    if (!confirm('Excluir este móvel? As peças vinculadas ficarão sem móvel.')) return
-    await supabase.from('moveis').delete().eq('id', movelId)
-    loadData()
-  }
-
   async function salvarCabecalho() {
     await supabase.from('romaneios').update({
       observacoes: obs,
@@ -176,18 +153,6 @@ export default function RomaneioEditor() {
     setPecaModalOpen(true)
   }
 
-  function openEditMovel(movel) {
-    setEditingMovel(movel)
-    setMovelForm({ codigo: movel.codigo, nome: movel.nome, ambiente: movel.ambiente || '' })
-    setMovelModalOpen(true)
-  }
-
-  function openNewMovel() {
-    setEditingMovel(null)
-    setMovelForm({ ...EMPTY_MOVEL })
-    setMovelModalOpen(true)
-  }
-
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
   if (!romaneio) return <p className="text-center text-red-500 py-12">Romaneio não encontrado</p>
 
@@ -196,7 +161,7 @@ export default function RomaneioEditor() {
   const moveisComPecas = moveis.map(m => ({
     ...m,
     pecas: pecas.filter(p => p.movel_id === m.id),
-  }))
+  })).filter(m => m.pecas.length > 0)
 
   return (
     <div>
@@ -208,7 +173,7 @@ export default function RomaneioEditor() {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{romaneio.codigo}</h2>
           <p className="text-sm text-gray-500">
-            Obra: {obra?.codigo} — {obra?.cliente} — {pecas.length} peça(s) em {moveis.length} móvel(is)
+            Obra: {obra?.codigo} — {obra?.cliente} — {pecas.length} peça(s)
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -217,9 +182,6 @@ export default function RomaneioEditor() {
           </Btn>
           <Btn variant="secondary" onClick={() => navigate(`/etiquetas?romaneio=${id}`)}>
             <Tag size={18} /> Etiquetas
-          </Btn>
-          <Btn variant="secondary" onClick={openNewMovel}>
-            <Box size={18} /> Novo Móvel
           </Btn>
           <Btn onClick={openNewPeca}>
             <Plus size={18} /> Nova Peça
@@ -256,36 +218,46 @@ export default function RomaneioEditor() {
         </CardBody>
       </Card>
 
-      {/* Móveis (cada um com suas peças) */}
+      {/* Aviso se a obra não tem móveis cadastrados */}
+      {moveis.length === 0 && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-center gap-2">
+          <Box size={16} />
+          Esta obra não tem móveis cadastrados. As peças serão criadas avulsas. Para vincular peças aos móveis, cadastre os móveis primeiro em <button onClick={() => navigate(`/obras/${obra.id}`)} className="underline cursor-pointer">{obra?.codigo}</button>.
+        </div>
+      )}
+
+      {/* Peças agrupadas por móvel */}
       {moveisComPecas.length === 0 && pecasSemMovel.length === 0 ? (
         <Card>
           <CardBody className="text-center py-12">
-            <Box size={48} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-500 mb-4">Nenhum móvel ou peça neste romaneio</p>
-            <div className="flex gap-2 justify-center">
-              <Btn onClick={openNewMovel} size="sm" variant="secondary"><Box size={16} /> Adicionar móvel</Btn>
-              <Btn onClick={openNewPeca} size="sm"><Plus size={16} /> Adicionar peça</Btn>
-            </div>
+            <p className="text-gray-500 mb-4">Nenhuma peça cadastrada neste romaneio</p>
+            <Btn onClick={openNewPeca} size="sm"><Plus size={16} /> Adicionar peça</Btn>
           </CardBody>
         </Card>
       ) : (
         <div className="space-y-4">
           {moveisComPecas.map(movel => (
-            <MovelSection
-              key={movel.id}
-              movel={movel}
-              onEdit={() => openEditMovel(movel)}
-              onDelete={() => deleteMovel(movel.id)}
-              onEditPeca={openEditPeca}
-              onDeletePeca={deletePeca}
-              onDuplicarPeca={duplicarPeca}
-            />
+            <Card key={movel.id}>
+              <div className="px-4 py-3 bg-blue-50 border-b border-gray-100 flex items-center gap-2">
+                <Box size={18} className="text-blue-600" />
+                <span className="font-semibold text-gray-900">{movel.codigo}</span>
+                <span className="text-gray-700">— {movel.nome}</span>
+                {movel.ambiente && <span className="text-gray-500 text-sm">({movel.ambiente})</span>}
+                <span className="text-xs text-gray-400 ml-auto">{movel.pecas.length} peça(s)</span>
+              </div>
+              <PecasTable
+                pecas={movel.pecas}
+                onEdit={openEditPeca}
+                onDelete={deletePeca}
+                onDuplicar={duplicarPeca}
+              />
+            </Card>
           ))}
 
           {pecasSemMovel.length > 0 && (
             <Card>
               <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                <h3 className="font-medium text-gray-700">Peças sem móvel ({pecasSemMovel.length})</h3>
+                <h3 className="font-medium text-gray-700">Peças avulsas ({pecasSemMovel.length})</h3>
               </div>
               <PecasTable
                 pecas={pecasSemMovel}
@@ -302,7 +274,7 @@ export default function RomaneioEditor() {
       <Modal open={pecaModalOpen} onClose={() => setPecaModalOpen(false)} title={editingPeca ? 'Editar Peça' : 'Nova Peça'} size="lg">
         <form onSubmit={handleSavePeca} className="space-y-4">
           <Select
-            label="Móvel (opcional)"
+            label={`Móvel ${moveis.length > 0 ? '(da obra)' : '(nenhum cadastrado)'}`}
             value={pecaForm.movel_id}
             onChange={e => setPecaForm({ ...pecaForm, movel_id: e.target.value })}
             placeholder="Sem móvel / avulsa"
@@ -334,58 +306,7 @@ export default function RomaneioEditor() {
           </div>
         </form>
       </Modal>
-
-      {/* Modal de móvel */}
-      <Modal open={movelModalOpen} onClose={() => setMovelModalOpen(false)} title={editingMovel ? 'Editar Móvel' : 'Novo Móvel'}>
-        <form onSubmit={handleSaveMovel} className="space-y-4">
-          <Input label="Código / Item de contrato *" value={movelForm.codigo} onChange={e => setMovelForm({ ...movelForm, codigo: e.target.value })} placeholder="Ex: 3.2 ou M01" required />
-          <Input label="Nome do móvel *" value={movelForm.nome} onChange={e => setMovelForm({ ...movelForm, nome: e.target.value })} placeholder="Ex: Armário Superior Cozinha" required />
-          <Input label="Ambiente" value={movelForm.ambiente} onChange={e => setMovelForm({ ...movelForm, ambiente: e.target.value })} placeholder="Ex: Cozinha" />
-          <div className="flex justify-end gap-2 pt-2">
-            <Btn type="button" variant="secondary" onClick={() => setMovelModalOpen(false)}>Cancelar</Btn>
-            <Btn type="submit">{editingMovel ? 'Salvar' : 'Criar Móvel'}</Btn>
-          </div>
-        </form>
-      </Modal>
     </div>
-  )
-}
-
-function MovelSection({ movel, onEdit, onDelete, onEditPeca, onDeletePeca, onDuplicarPeca }) {
-  return (
-    <Card>
-      <div className="px-4 py-3 bg-blue-50 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Box size={18} className="text-blue-600" />
-          <div>
-            <span className="font-semibold text-gray-900">{movel.codigo}</span>
-            <span className="text-gray-700"> — {movel.nome}</span>
-            {movel.ambiente && <span className="text-gray-500 text-sm ml-2">({movel.ambiente})</span>}
-            <span className="text-xs text-gray-400 ml-2">{movel.pecas.length} peça(s)</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded cursor-pointer" title="Editar móvel">
-            <Pencil size={14} />
-          </button>
-          <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer" title="Excluir móvel">
-            <Trash2 size={14} />
-          </button>
-        </div>
-      </div>
-      {movel.pecas.length > 0 ? (
-        <PecasTable
-          pecas={movel.pecas}
-          onEdit={onEditPeca}
-          onDelete={onDeletePeca}
-          onDuplicar={onDuplicarPeca}
-        />
-      ) : (
-        <div className="px-4 py-6 text-center text-sm text-gray-400">
-          Nenhuma peça neste móvel
-        </div>
-      )}
-    </Card>
   )
 }
 
