@@ -10,10 +10,11 @@ const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/importar', icon: FileUp, label: 'Importar Guia' },
   { to: '/obras', icon: Building2, label: 'Obras' },
+  { to: '/romaneios', icon: ClipboardList, label: 'Romaneios' },
   { to: '/pecas', icon: Package, label: 'Peças' },
   { to: '/scanner', icon: ScanLine, label: 'Scanner' },
   { to: '/etiquetas', icon: Tag, label: 'Etiquetas' },
-  { to: '/relatorio', icon: FileBarChart, label: 'Relatório' },
+  { to: '/relatorio', icon: FileBarChart, label: 'Rastreio' },
   { to: '/estacao', icon: Smartphone, label: 'Estações Móveis' },
 ]
 

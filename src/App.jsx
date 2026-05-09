@@ -7,6 +7,7 @@ import Obras from './pages/Obras'
 import ObraDetalhe from './pages/ObraDetalhe'
 import RomaneioEditor from './pages/RomaneioEditor'
 import RomaneioImprimir from './pages/RomaneioImprimir'
+import Romaneios from './pages/Romaneios'
 import Pecas from './pages/Pecas'
 import Scanner from './pages/Scanner'
 import Etiquetas from './pages/Etiquetas'
@@ -45,6 +46,7 @@ export default function App() {
       <Route path="/importar" element={<ProtectedRoute user={user}><ImportarGuia /></ProtectedRoute>} />
       <Route path="/obras" element={<ProtectedRoute user={user}><Obras /></ProtectedRoute>} />
       <Route path="/obras/:id" element={<ProtectedRoute user={user}><ObraDetalhe /></ProtectedRoute>} />
+      <Route path="/romaneios" element={<ProtectedRoute user={user}><Romaneios /></ProtectedRoute>} />
       <Route path="/romaneio/:id" element={<ProtectedRoute user={user}><RomaneioEditor /></ProtectedRoute>} />
       <Route path="/romaneio/:id/imprimir" element={<ProtectedRoute user={user}><RomaneioImprimir /></ProtectedRoute>} />
       <Route path="/pecas" element={<ProtectedRoute user={user}><Pecas /></ProtectedRoute>} />
