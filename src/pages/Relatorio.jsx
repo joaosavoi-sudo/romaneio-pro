@@ -162,7 +162,7 @@ function EtapaSection({ etapa, pecas, mostrarObra }) {
           <tr style={{ background: '#f3f4f6' }}>
             <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #d1d5db' }}>Código</th>
             <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #d1d5db' }}>Nome</th>
-            <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #d1d5db' }}>Móvel</th>
+            <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #d1d5db' }}>Item</th>
             <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #d1d5db' }}>Dimensões</th>
             <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #d1d5db' }}>Material</th>
             {mostrarObra && <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: '1px solid #d1d5db' }}>Obra</th>}

@@ -222,7 +222,7 @@ export default function RomaneioEditor() {
       {moveis.length === 0 && (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-center gap-2">
           <Box size={16} />
-          Esta obra não tem móveis cadastrados. As peças serão criadas avulsas. Para vincular peças aos móveis, cadastre os móveis primeiro em <button onClick={() => navigate(`/obras/${obra.id}`)} className="underline cursor-pointer">{obra?.codigo}</button>.
+          Esta obra não tem itens cadastrados. As peças serão criadas avulsas. Para vincular peças aos itens, cadastre os itens primeiro em <button onClick={() => navigate(`/obras/${obra.id}`)} className="underline cursor-pointer">{obra?.codigo}</button>.
         </div>
       )}
 
@@ -274,10 +274,10 @@ export default function RomaneioEditor() {
       <Modal open={pecaModalOpen} onClose={() => setPecaModalOpen(false)} title={editingPeca ? 'Editar Peça' : 'Nova Peça'} size="lg">
         <form onSubmit={handleSavePeca} className="space-y-4">
           <Select
-            label={`Móvel ${moveis.length > 0 ? '(da obra)' : '(nenhum cadastrado)'}`}
+            label={`Item ${moveis.length > 0 ? '(da obra)' : '(nenhum cadastrado)'}`}
             value={pecaForm.movel_id}
             onChange={e => setPecaForm({ ...pecaForm, movel_id: e.target.value })}
-            placeholder="Sem móvel / avulsa"
+            placeholder="Sem item / avulsa"
             options={moveis.map(m => ({ value: m.id, label: `${m.codigo} — ${m.nome}${m.ambiente ? ' (' + m.ambiente + ')' : ''}` }))}
           />
 

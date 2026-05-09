@@ -254,7 +254,7 @@ export default function Scanner() {
               )}
               {movel && (
                 <div>
-                  <span className="text-gray-500">Móvel:</span>
+                  <span className="text-gray-500">Item:</span>
                   <span className="ml-2 text-gray-900">{movel.codigo} — {movel.nome}</span>
                 </div>
               )}

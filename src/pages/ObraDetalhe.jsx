@@ -124,7 +124,7 @@ export default function ObraDetalhe() {
   }
 
   async function deleteMovel(movelId) {
-    if (!confirm('Excluir este móvel? Peças vinculadas em romaneios ficarão sem móvel.')) return
+    if (!confirm('Excluir este item? Peças vinculadas em romaneios ficarão sem item.')) return
     await supabase.from('moveis').delete().eq('id', movelId)
     loadData()
   }
@@ -315,7 +315,7 @@ export default function ObraDetalhe() {
         <TabBtn current={tab} value="overview" onClick={setTab} icon={LayoutGrid} label="Visão Geral" />
         <TabBtn current={tab} value="pendencias" onClick={setTab} icon={AlertCircle} label={`Pendências${pendAbertas.length > 0 ? ` (${pendAbertas.length})` : ''}`} />
         <TabBtn current={tab} value="cronograma" onClick={setTab} icon={Calendar} label="Cronograma" />
-        <TabBtn current={tab} value="moveis" onClick={setTab} icon={Box} label={`Móveis (${moveis.length})`} />
+        <TabBtn current={tab} value="moveis" onClick={setTab} icon={Box} label={`Itens (${moveis.length})`} />
         <TabBtn current={tab} value="romaneios" onClick={setTab} icon={ClipboardList} label={`Romaneios (${romaneios.length})`} />
         <TabBtn current={tab} value="anexos" onClick={setTab} icon={Paperclip} label="Anexos" />
         <TabBtn current={tab} value="relatorio" onClick={setTab} icon={FileBarChart} label="Relatório" />
@@ -326,7 +326,7 @@ export default function ObraDetalhe() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <KpiCard label="Conclusão" value={`${pctConcluido}%`} sub={`${pecasExpedidas}/${totalPecas} peças expedidas`} cor="#10b981" />
-            <KpiCard label="Móveis" value={moveis.length} sub="cadastrados na obra" cor="#3b82f6" />
+            <KpiCard label="Itens" value={moveis.length} sub="cadastrados na obra" cor="#3b82f6" />
             <KpiCard label="Pendências" value={pendAbertas.length} sub="em aberto" cor={pendAbertas.length > 0 ? '#f59e0b' : '#10b981'} />
           </div>
 
@@ -486,15 +486,15 @@ export default function ObraDetalhe() {
       {tab === 'moveis' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-gray-500">{moveis.length} móvel(is) cadastrado(s)</p>
-            <Btn onClick={openNewMovel}><Plus size={16} /> Novo Móvel</Btn>
+            <p className="text-sm text-gray-500">{moveis.length} item(ns) cadastrado(s)</p>
+            <Btn onClick={openNewMovel}><Plus size={16} /> Novo Item</Btn>
           </div>
 
           {moveis.length === 0 ? (
             <Card><CardBody className="text-center py-12">
               <Box size={48} className="mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-500 mb-4">Nenhum móvel cadastrado nesta obra</p>
-              <Btn onClick={openNewMovel} size="sm"><Plus size={16} /> Adicionar primeiro móvel</Btn>
+              <p className="text-gray-500 mb-4">Nenhum item cadastrado nesta obra</p>
+              <Btn onClick={openNewMovel} size="sm"><Plus size={16} /> Adicionar primeiro item</Btn>
             </CardBody></Card>
           ) : (
             <Card>
@@ -607,7 +607,7 @@ export default function ObraDetalhe() {
       )}
 
       {/* MODAL: Móvel */}
-      <Modal open={movelModalOpen} onClose={() => setMovelModalOpen(false)} title={editingMovel ? 'Editar Móvel' : 'Novo Móvel'} size="lg">
+      <Modal open={movelModalOpen} onClose={() => setMovelModalOpen(false)} title={editingMovel ? 'Editar Item' : 'Novo Item'} size="lg">
         <form onSubmit={handleSaveMovel} className="space-y-3">
           <div className="grid grid-cols-3 gap-2">
             <Input label="Código *" value={movelForm.codigo} onChange={e => setMovelForm({ ...movelForm, codigo: e.target.value })} required />
@@ -644,7 +644,7 @@ export default function ObraDetalhe() {
           <Input label="Observações" value={movelForm.observacoes} onChange={e => setMovelForm({ ...movelForm, observacoes: e.target.value })} />
           <div className="flex justify-end gap-2 pt-2">
             <Btn type="button" variant="secondary" onClick={() => setMovelModalOpen(false)}>Cancelar</Btn>
-            <Btn type="submit">{editingMovel ? 'Salvar' : 'Criar Móvel'}</Btn>
+            <Btn type="submit">{editingMovel ? 'Salvar' : 'Criar Item'}</Btn>
           </div>
         </form>
       </Modal>

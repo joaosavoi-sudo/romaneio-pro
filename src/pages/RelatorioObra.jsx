@@ -124,7 +124,7 @@ export default function RelatorioObra() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
           <SecaoCard label="Status" value={statusGeral} color={statusCor} />
           <SecaoCard label="Conclusão" value={`${pctConcluido}%`} sub={`${pecasExpedidas}/${totalPecas} peças`} color="#059669" />
-          <SecaoCard label="Pendências em aberto" value={pendencias.length} sub={`${moveis.length} móveis cadastrados`} color={pendencias.length > 0 ? '#f59e0b' : '#10b981'} />
+          <SecaoCard label="Pendências em aberto" value={pendencias.length} sub={`${moveis.length} itens cadastrados`} color={pendencias.length > 0 ? '#f59e0b' : '#10b981'} />
         </div>
 
         {/* Cronograma */}

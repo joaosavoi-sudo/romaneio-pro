@@ -178,7 +178,7 @@ export default function ImportarGuia() {
           projeto_recebido: m.projeto_recebido,
         }))
         const { error: e2 } = await supabase.from('moveis').insert(inserts)
-        if (e2) throw new Error(`Erro ao criar móveis: ${e2.message}`)
+        if (e2) throw new Error(`Erro ao criar itens: ${e2.message}`)
       }
 
       // 5. Sucesso → vai pra obra
@@ -246,7 +246,7 @@ export default function ImportarGuia() {
                 label="Endereço da obra"
                 value={obra.endereco}
                 onChange={e => setObra({ ...obra, endereco: e.target.value })}
-                placeholder="Onde os móveis serão instalados"
+                placeholder="Onde os itens serão instalados"
                 className="md:col-span-2"
               />
               <Input
@@ -263,7 +263,7 @@ export default function ImportarGuia() {
           <CardBody>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold text-gray-900">
-                Móveis ({incluidosCount} de {moveis.length})
+                Itens ({incluidosCount} de {moveis.length})
               </h3>
               <div className="flex gap-2 text-sm">
                 <button
@@ -302,7 +302,7 @@ export default function ImportarGuia() {
             Cancelar
           </Btn>
           <Btn onClick={importar} disabled={importando || incluidosCount === 0}>
-            {importando ? <><Loader2 size={16} className="animate-spin" /> Importando...</> : <><CheckCircle2 size={16} /> Importar ({incluidosCount} móveis)</>}
+            {importando ? <><Loader2 size={16} className="animate-spin" /> Importando...</> : <><CheckCircle2 size={16} /> Importar ({incluidosCount} itens)</>}
           </Btn>
         </div>
       </div>
@@ -316,7 +316,7 @@ export default function ImportarGuia() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Importar Guia Fechada</h2>
         <p className="text-sm text-gray-500">
-          Faça upload do CSV/TSV exportado da planilha. A IA vai extrair a obra e os móveis automaticamente.
+          Faça upload do CSV/TSV exportado da planilha. A IA vai extrair a obra e os itens automaticamente.
         </p>
       </div>
 
@@ -402,7 +402,7 @@ export default function ImportarGuia() {
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
               <p className="font-medium mb-1">Analisando documento...</p>
               <p className="text-xs">
-                Pode levar até 90 segundos. A IA está lendo o documento e extraindo cliente, obra, arquiteto e todos os móveis.
+                Pode levar até 90 segundos. A IA está lendo o documento e extraindo cliente, obra, arquiteto e todos os itens.
               </p>
             </div>
           )}

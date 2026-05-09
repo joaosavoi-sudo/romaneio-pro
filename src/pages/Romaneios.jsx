@@ -203,7 +203,7 @@ export default function Romaneios() {
             required
           />
           <p className="text-xs text-gray-500">
-            O romaneio será criado vinculado à obra escolhida. Você poderá adicionar peças e vinculá-las aos móveis dessa obra.
+            O romaneio será criado vinculado à obra escolhida. Você poderá adicionar peças e vinculá-las aos itens dessa obra.
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Btn type="button" variant="secondary" onClick={() => setNovoModalOpen(false)}>Cancelar</Btn>

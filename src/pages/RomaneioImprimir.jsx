@@ -97,7 +97,7 @@ export default function RomaneioImprimir() {
 
         {/* Resumo */}
         <div style={{ marginBottom: '20px', padding: '8px 12px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', fontSize: '10pt' }}>
-          <strong>Total: {pecas.length} peça(s)</strong> distribuída(s) em {moveis.length} móvel(is)
+          <strong>Total: {pecas.length} peça(s)</strong> distribuída(s) em {moveis.length} item(ns)
           {pecasSemMovel.length > 0 && ` + ${pecasSemMovel.length} peça(s) avulsa(s)`}
         </div>
 
@@ -108,7 +108,7 @@ export default function RomaneioImprimir() {
 
         {pecasSemMovel.length > 0 && (
           <MovelTable
-            movel={{ codigo: '—', nome: 'Peças avulsas (sem móvel)', ambiente: '', pecas: pecasSemMovel }}
+            movel={{ codigo: '—', nome: 'Peças avulsas (sem item)', ambiente: '', pecas: pecasSemMovel }}
           />
         )}
 
