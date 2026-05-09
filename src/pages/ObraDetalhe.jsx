@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase'
 import { gerarCodigo } from '../lib/constants'
 import {
   MARCOS_PADRAO, PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
-  STATUS_PENDENCIA, STATUS_PENDENCIA_MAP, STATUS_MARCO_MAP, FASES, FASE_MAP, isAtrasado,
+  STATUS_PENDENCIA_MAP, STATUS_MARCO_MAP, FASES, FASE_MAP, isAtrasado,
 } from '../lib/templates'
 import { Btn, Input, Select, Card, CardBody, Badge, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
@@ -592,12 +592,17 @@ export default function ObraDetalhe() {
       {/* TAB: Anexos */}
       {tab === 'anexos' && <AnexosObra obraId={id} />}
 
-      {/* TAB: Relatório (placeholder Fase 4) */}
+      {/* TAB: Relatório */}
       {tab === 'relatorio' && (
         <Card><CardBody className="text-center py-12">
-          <FileBarChart size={48} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500">One Page Report virá em breve (Fase 4)</p>
-          <p className="text-xs text-gray-400 mt-1">PDF de 1 página com cronograma, status e próximos passos pra enviar a clientes</p>
+          <FileBarChart size={48} className="mx-auto text-primary-300 mb-3" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">One Page Report</h3>
+          <p className="text-gray-500 mb-4 max-w-md mx-auto">
+            Página A4 com status, cronograma, produção e pendências — pronta pra enviar a cliente, arquiteto ou construtora.
+          </p>
+          <Btn onClick={() => navigate(`/obras/${id}/relatorio`)} size="lg">
+            <FileBarChart size={18} /> Abrir relatório
+          </Btn>
         </CardBody></Card>
       )}
 
