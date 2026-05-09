@@ -29,6 +29,26 @@ export const MATERIAIS = [
   'HDF', 'Fórmica', 'Vidro', 'Espelho', 'Acrílico', 'Outro',
 ]
 
+// Status macro do item, derivado das etapas das peças (não persistido).
+// Ordem importa: prioridade do mais "à frente" no fluxo.
+export const ETAPA_ITEM_DERIVADA = {
+  sem_pecas:      { id: 'sem_pecas',      label: 'Aguardando romaneio', cor: '#9ca3af' },
+  em_producao:    { id: 'em_producao',    label: 'Em produção',         cor: '#3b82f6' },
+  em_acabamento:  { id: 'em_acabamento',  label: 'Em acabamento',       cor: '#8b5cf6' },
+  em_conferencia: { id: 'em_conferencia', label: 'Em conferência',      cor: '#06b6d4' },
+  em_embalagem:   { id: 'em_embalagem',   label: 'Em embalagem',        cor: '#14b8a6' },
+  expedido:       { id: 'expedido',       label: 'Expedido',            cor: '#f59e0b' },
+}
+
+// Semáforo de saúde do item (manual + sugestão automática)
+export const SEMAFORO = [
+  { value: 'verde',    label: '🟢 Verde',    cor: '#10b981' },
+  { value: 'amarelo',  label: '🟡 Amarelo',  cor: '#f59e0b' },
+  { value: 'vermelho', label: '🔴 Vermelho', cor: '#ef4444' },
+]
+
+export const SEMAFORO_MAP = Object.fromEntries(SEMAFORO.map(s => [s.value, s]))
+
 export function proximaEtapa(etapaAtual) {
   const idx = ETAPAS.findIndex(e => e.id === etapaAtual)
   if (idx < 0 || idx >= ETAPAS.length - 1) return null
