@@ -1,4 +1,4 @@
-import { ETAPA_ITEM_DERIVADA } from './constants'
+import { ETAPA_ITEM_DERIVADA, STATUS_POS_EXPEDICAO } from './constants'
 
 // Dias entre hoje e uma data ISO/Date. Negativo = passado.
 export function diasAte(data) {
@@ -12,28 +12,20 @@ export function diasAte(data) {
 }
 
 // Calcula a etapa atual do item. Prioridade:
-//   1. bloqueado → PARADO/PENDENTE
-//   2. data_montagem_concluida → Entregue
-//   3. data_inicio_montagem → Em montagem
-//   4. data_entrega_canteiro → Entregue no canteiro
-//   5. derivado das peças
+//   1. motivo_bloqueio preenchido → PARADO/PENDENTE (vermelho)
+//   2. status_pos_expedicao preenchido → label correspondente
+//   3. derivado das peças
 export function calcularEtapaItem(movel, pecasDoItem = []) {
-  if (movel.bloqueado) {
+  if (movel.motivo_bloqueio && movel.motivo_bloqueio.trim()) {
     return {
       id: 'bloqueado',
       label: 'PARADO/PENDENTE',
       cor: '#ef4444',
-      motivo: movel.motivo_bloqueio || '',
+      motivo: movel.motivo_bloqueio,
     }
   }
-  if (movel.data_montagem_concluida) {
-    return { id: 'entregue', label: 'Entregue', cor: '#10b981' }
-  }
-  if (movel.data_inicio_montagem) {
-    return { id: 'em_montagem', label: 'Em montagem', cor: '#ea580c' }
-  }
-  if (movel.data_entrega_canteiro) {
-    return { id: 'entregue_canteiro', label: 'Entregue no canteiro', cor: '#f97316' }
+  if (movel.status_pos_expedicao && STATUS_POS_EXPEDICAO[movel.status_pos_expedicao]) {
+    return STATUS_POS_EXPEDICAO[movel.status_pos_expedicao]
   }
   if (!pecasDoItem || pecasDoItem.length === 0) {
     return ETAPA_ITEM_DERIVADA.sem_pecas
@@ -46,12 +38,12 @@ export function calcularEtapaItem(movel, pecasDoItem = []) {
   return ETAPA_ITEM_DERIVADA.em_producao
 }
 
-// Sugere semáforo baseado em bloqueio + pendências do item + previsão entrega.
-//   - vermelho: bloqueado OU pendência aberta com prazo vencido
-//   - amarelo: pendência aberta sem prazo OU prazo ≤ 7d OU previsão entrega ≤ 7d e ainda não expedido
+// Calcula o semáforo do item (sempre — não armazenado).
+//   - vermelho: bloqueado OR pendência aberta com prazo vencido
+//   - amarelo: pendência aberta sem prazo OU prazo ≤ 7d OU previsão entrega ≤ 7d e ainda não pós-expedição
 //   - verde: caso contrário
-export function sugerirSemaforo(movel, pendenciasDoItem = [], etapaAtual = null) {
-  if (movel.bloqueado) return 'vermelho'
+export function calcularSemaforo(movel, pendenciasDoItem = []) {
+  if (movel.motivo_bloqueio && movel.motivo_bloqueio.trim()) return 'vermelho'
 
   const abertas = pendenciasDoItem.filter(p => p.status === 'aberta')
 
@@ -69,13 +61,9 @@ export function sugerirSemaforo(movel, pendenciasDoItem = [], etapaAtual = null)
   })
   if (proximaPendencia) return 'amarelo'
 
-  // Previsão de entrega próxima e ainda não expedido/entregue
-  if (movel.previsao_entrega) {
+  if (movel.previsao_entrega && !movel.status_pos_expedicao) {
     const dias = diasAte(movel.previsao_entrega)
-    const jaPosExpedicao = etapaAtual && [
-      'expedido', 'entregue_canteiro', 'em_montagem', 'entregue',
-    ].includes(etapaAtual.id)
-    if (dias !== null && dias <= 7 && !jaPosExpedicao) return 'amarelo'
+    if (dias !== null && dias <= 7) return 'amarelo'
   }
 
   return 'verde'

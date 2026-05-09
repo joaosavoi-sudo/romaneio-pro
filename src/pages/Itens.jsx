@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ListChecks, Search, Download, Building2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { SEMAFORO_MAP } from '../lib/constants'
-import { calcularEtapaItem } from '../lib/itemStatus'
+import { SEMAFORO } from '../lib/constants'
+import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
 import { Btn, Card, CardBody, Select } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 
@@ -11,6 +11,7 @@ export default function Itens() {
   const navigate = useNavigate()
   const [moveis, setMoveis] = useState([])
   const [pecasPorMovel, setPecasPorMovel] = useState({})
+  const [pendenciasPorMovel, setPendenciasPorMovel] = useState({})
   const [loading, setLoading] = useState(true)
 
   // Filtros
@@ -23,52 +24,57 @@ export default function Itens() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
-    // Móveis com obra (cliente, código, arquiteto, construtora)
     const { data: movRes } = await supabase
       .from('moveis')
       .select('*, obras(id, codigo, cliente, arquiteto, construtora, status)')
       .order('codigo', { ascending: true })
 
-    // Peças (id, etapa, movel_id) — usadas pra derivar status
     const { data: pecasRes } = await supabase
       .from('pecas')
       .select('id, etapa, movel_id')
       .not('movel_id', 'is', null)
 
-    // Indexar peças por movel_id
-    const idx = {}
+    const { data: pendRes } = await supabase
+      .from('pendencias')
+      .select('id, status, prazo, movel_id')
+      .not('movel_id', 'is', null)
+
+    const idxPecas = {}
     ;(pecasRes || []).forEach(p => {
-      if (!idx[p.movel_id]) idx[p.movel_id] = []
-      idx[p.movel_id].push(p)
+      if (!idxPecas[p.movel_id]) idxPecas[p.movel_id] = []
+      idxPecas[p.movel_id].push(p)
+    })
+
+    const idxPend = {}
+    ;(pendRes || []).forEach(p => {
+      if (!idxPend[p.movel_id]) idxPend[p.movel_id] = []
+      idxPend[p.movel_id].push(p)
     })
 
     setMoveis(movRes || [])
-    setPecasPorMovel(idx)
+    setPecasPorMovel(idxPecas)
+    setPendenciasPorMovel(idxPend)
     setLoading(false)
   }
 
-  // Lista de obras únicas pro filtro
   const obras = useMemo(() => {
     const map = new Map()
     moveis.forEach(m => {
-      if (m.obras && !map.has(m.obras.id)) {
-        map.set(m.obras.id, m.obras)
-      }
+      if (m.obras && !map.has(m.obras.id)) map.set(m.obras.id, m.obras)
     })
     return Array.from(map.values()).sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
   }, [moveis])
 
-  // Filtragem + ordenação
   const filtrados = useMemo(() => {
     let arr = moveis.filter(m => {
       if (filtroObra && m.obras?.id !== filtroObra) return false
-      if (filtroSemaforo === 'sem' && m.semaforo) return false
-      if (filtroSemaforo && filtroSemaforo !== 'sem' && m.semaforo !== filtroSemaforo) return false
+      if (filtroSemaforo) {
+        const cor = calcularSemaforo(m, pendenciasPorMovel[m.id] || [])
+        if (cor !== filtroSemaforo) return false
+      }
       if (filtroResp) {
         const r = filtroResp.toLowerCase()
-        const a = (m.responsavel_producao || '').toLowerCase()
-        const b = (m.responsavel_acompanhamento || '').toLowerCase()
-        if (!a.includes(r) && !b.includes(r)) return false
+        if (!(m.responsavel || '').toLowerCase().includes(r)) return false
       }
       if (busca) {
         const q = busca.toLowerCase()
@@ -80,7 +86,6 @@ export default function Itens() {
       }
       return true
     })
-    // Ordenar
     arr.sort((a, b) => {
       const va = getCampoOrdem(a, ordenacao.campo)
       const vb = getCampoOrdem(b, ordenacao.campo)
@@ -88,13 +93,12 @@ export default function Itens() {
       return ordenacao.dir === 'asc' ? cmp : -cmp
     })
     return arr
-  }, [moveis, filtroObra, filtroSemaforo, filtroResp, busca, ordenacao])
+  }, [moveis, pendenciasPorMovel, filtroObra, filtroSemaforo, filtroResp, busca, ordenacao])
 
-  // KPIs por semáforo (sobre os filtrados)
-  const cont = { verde: 0, amarelo: 0, vermelho: 0, sem: 0 }
+  const cont = { verde: 0, amarelo: 0, vermelho: 0 }
   filtrados.forEach(m => {
-    if (m.semaforo) cont[m.semaforo]++
-    else cont.sem++
+    const cor = calcularSemaforo(m, pendenciasPorMovel[m.id] || [])
+    cont[cor]++
   })
 
   function ordenarPor(campo) {
@@ -108,24 +112,18 @@ export default function Itens() {
     const colunas = [
       'GUIA', 'CLIENTE', 'ARQ./CONSTRUTORA', 'ITEM', 'AMBIENTE', 'DESCRIÇÃO',
       'INTERNO', 'EXTERIOR', 'INCLUÍDO', 'NÃO INCLUÍDO', 'QTDE',
-      'DATA CONTRATO', 'PRAZO', 'DATA MEDIÇÃO', 'PROJETO APROVADO', 'AMOSTRA APROVADA',
-      'INÍCIO PRODUÇÃO', 'PREVISÃO ENTREGA', 'ENTREGUE CANTEIRO', 'INÍCIO MONTAGEM', 'MONTAGEM CONCLUÍDA',
-      'RESP. PRODUÇÃO', 'RESP. ACOMPANHAMENTO', 'STATUS', 'SEMÁFORO',
-      'BLOQUEADO', 'MOTIVO BLOQUEIO', 'OBSERVAÇÕES', 'ÚLTIMA ATUALIZAÇÃO',
+      'RESPONSÁVEL', 'PREVISÃO ENTREGA', 'STATUS', 'SEMÁFORO', 'MOTIVO BLOQUEIO', 'OBSERVAÇÕES',
     ]
     const linhas = filtrados.map(m => {
       const etapa = calcularEtapaItem(m, pecasPorMovel[m.id] || [])
-      const sem = m.semaforo ? SEMAFORO_MAP[m.semaforo]?.label || m.semaforo : ''
+      const cor = calcularSemaforo(m, pendenciasPorMovel[m.id] || [])
       return [
         m.obras?.codigo, m.obras?.cliente,
         [m.obras?.arquiteto, m.obras?.construtora].filter(Boolean).join(' / '),
         m.codigo, m.ambiente, m.descricao || m.nome,
         m.acabamento_interno, m.acabamento_externo, m.incluido, m.nao_incluido, m.quantidade,
-        m.data_contrato, m.prazo_contrato, m.data_medicao, m.data_projeto_aprovado, m.data_amostra_aprovada,
-        m.data_inicio_producao, m.previsao_entrega, m.data_entrega_canteiro, m.data_inicio_montagem, m.data_montagem_concluida,
-        m.responsavel_producao, m.responsavel_acompanhamento, etapa.label, sem,
-        m.bloqueado ? 'SIM' : '', m.motivo_bloqueio, m.observacoes,
-        m.ultima_atualizacao_em ? `${new Date(m.ultima_atualizacao_em).toLocaleDateString('pt-BR')} ${m.ultima_atualizacao_por || ''}` : '',
+        m.responsavel, m.previsao_entrega, etapa.label, SEMAFORO[cor]?.label || cor,
+        m.motivo_bloqueio, m.observacoes,
       ]
     })
     const csv = [colunas, ...linhas]
@@ -157,11 +155,10 @@ export default function Itens() {
       </div>
 
       {/* KPIs semáforo */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+      <div className="grid grid-cols-3 gap-2 mb-3">
         <SemaforoChip cor="#10b981" label="Verde" count={cont.verde} ativo={filtroSemaforo === 'verde'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'verde' ? '' : 'verde')} />
         <SemaforoChip cor="#f59e0b" label="Amarelo" count={cont.amarelo} ativo={filtroSemaforo === 'amarelo'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'amarelo' ? '' : 'amarelo')} />
         <SemaforoChip cor="#ef4444" label="Vermelho" count={cont.vermelho} ativo={filtroSemaforo === 'vermelho'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'vermelho' ? '' : 'vermelho')} />
-        <SemaforoChip cor="#9ca3af" label="Sem cor" count={cont.sem} ativo={filtroSemaforo === 'sem'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'sem' ? '' : 'sem')} />
       </div>
 
       {/* Filtros */}
@@ -223,16 +220,15 @@ export default function Itens() {
                   <th className="text-left px-3 py-2.5 font-medium text-gray-500">Descrição</th>
                   <th className="text-left px-3 py-2.5 font-medium text-gray-500">Status</th>
                   <th className="text-left px-3 py-2.5 font-medium text-gray-500">Sem.</th>
-                  <ThSort label="Resp. prod." campo="responsavel_producao" ordenacao={ordenacao} onClick={ordenarPor} />
-                  <ThSort label="Resp. acomp." campo="responsavel_acompanhamento" ordenacao={ordenacao} onClick={ordenarPor} />
+                  <ThSort label="Responsável" campo="responsavel" ordenacao={ordenacao} onClick={ordenarPor} />
                   <ThSort label="Prev. entrega" campo="previsao_entrega" ordenacao={ordenacao} onClick={ordenarPor} />
-                  <ThSort label="Última atual." campo="ultima_atualizacao_em" ordenacao={ordenacao} onClick={ordenarPor} />
                 </tr>
               </thead>
               <tbody>
                 {filtrados.map(m => {
                   const etapa = calcularEtapaItem(m, pecasPorMovel[m.id] || [])
-                  const semInfo = m.semaforo ? SEMAFORO_MAP[m.semaforo] : null
+                  const cor = calcularSemaforo(m, pendenciasPorMovel[m.id] || [])
+                  const semInfo = SEMAFORO[cor]
                   return (
                     <tr
                       key={m.id}
@@ -248,16 +244,12 @@ export default function Itens() {
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <StatusBadge label={etapa.label} cor={etapa.cor} />
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-base">
-                        {semInfo ? <span title={semInfo.label}>{semInfo.label.split(' ')[0]}</span> : <span className="text-gray-300">—</span>}
+                      <td className="px-3 py-2.5 whitespace-nowrap text-base" title={semInfo.label}>
+                        {semInfo.label.split(' ')[0]}
                       </td>
-                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{m.responsavel_producao || '—'}</td>
-                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{m.responsavel_acompanhamento || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{m.responsavel || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
                         {m.previsao_entrega ? new Date(m.previsao_entrega).toLocaleDateString('pt-BR') : '—'}
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
-                        {m.ultima_atualizacao_em ? `${new Date(m.ultima_atualizacao_em).toLocaleDateString('pt-BR')} · ${m.ultima_atualizacao_por || ''}` : '—'}
                       </td>
                     </tr>
                   )
@@ -271,7 +263,6 @@ export default function Itens() {
   )
 }
 
-// Helpers
 function getCampoOrdem(m, campo) {
   if (campo === 'obra_codigo') return m.obras?.codigo || ''
   if (campo === 'obra_cliente') return m.obras?.cliente || ''

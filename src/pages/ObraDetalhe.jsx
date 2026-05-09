@@ -3,15 +3,15 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, ClipboardList, Trash2, Box, Pencil,
   AlertCircle, Calendar, Paperclip, FileBarChart, LayoutGrid,
-  CheckCircle2, Clock, AlertTriangle, ListChecks, Search, Lock,
+  CheckCircle2, Clock, AlertTriangle, ListChecks, Search,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { gerarCodigo, SEMAFORO, SEMAFORO_MAP } from '../lib/constants'
+import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO } from '../lib/constants'
 import {
   MARCOS_PADRAO, PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
   STATUS_PENDENCIA_MAP, STATUS_MARCO_MAP, FASES, FASE_MAP, isAtrasado,
 } from '../lib/templates'
-import { calcularEtapaItem, sugerirSemaforo } from '../lib/itemStatus'
+import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
 import { Btn, Input, Select, Card, CardBody, Badge, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 import AnexosObra from '../components/AnexosObra'
@@ -20,14 +20,11 @@ const EMPTY_MOVEL = {
   codigo: '', nome: '', ambiente: '', descricao: '', dimensoes: '',
   acabamento_interno: '', acabamento_externo: '', incluido: '', nao_incluido: '',
   quantidade: 1, observacoes: '', projeto_recebido: '',
-  // Gestão (v6)
-  responsavel_producao: '', responsavel_acompanhamento: '',
-  data_contrato: '', prazo_contrato: '', data_medicao: '',
-  data_projeto_aprovado: '', data_amostra_aprovada: '', data_inicio_producao: '',
+  // Gestão (v6.1 — enxuto)
+  responsavel: '',
   previsao_entrega: '',
-  data_entrega_canteiro: '', data_inicio_montagem: '', data_montagem_concluida: '',
-  bloqueado: false, motivo_bloqueio: '',
-  semaforo: '',
+  status_pos_expedicao: '',
+  motivo_bloqueio: '',
 }
 
 const EMPTY_PENDENCIA = { tipo: 'cliente', titulo: '', descricao: '', responsavel: '', prazo: '', movel_id: '' }
@@ -51,7 +48,6 @@ export default function ObraDetalhe() {
   const [movelModalOpen, setMovelModalOpen] = useState(false)
   const [editingMovel, setEditingMovel] = useState(null)
   const [movelForm, setMovelForm] = useState({ ...EMPTY_MOVEL })
-  const [movelTab, setMovelTab] = useState('contrato')
 
   const [pendModalOpen, setPendModalOpen] = useState(false)
   const [editingPend, setEditingPend] = useState(null)
@@ -127,7 +123,6 @@ export default function ObraDetalhe() {
   function openNewMovel() {
     setEditingMovel(null)
     setMovelForm({ ...EMPTY_MOVEL })
-    setMovelTab('contrato')
     setMovelModalOpen(true)
   }
 
@@ -140,24 +135,11 @@ export default function ObraDetalhe() {
       incluido: m.incluido || '', nao_incluido: m.nao_incluido || '',
       quantidade: m.quantidade || 1, observacoes: m.observacoes || '',
       projeto_recebido: m.projeto_recebido || '',
-      // Gestão (v6)
-      responsavel_producao: m.responsavel_producao || '',
-      responsavel_acompanhamento: m.responsavel_acompanhamento || '',
-      data_contrato: m.data_contrato || '',
-      prazo_contrato: m.prazo_contrato || '',
-      data_medicao: m.data_medicao || '',
-      data_projeto_aprovado: m.data_projeto_aprovado || '',
-      data_amostra_aprovada: m.data_amostra_aprovada || '',
-      data_inicio_producao: m.data_inicio_producao || '',
+      responsavel: m.responsavel || '',
       previsao_entrega: m.previsao_entrega || '',
-      data_entrega_canteiro: m.data_entrega_canteiro || '',
-      data_inicio_montagem: m.data_inicio_montagem || '',
-      data_montagem_concluida: m.data_montagem_concluida || '',
-      bloqueado: !!m.bloqueado,
+      status_pos_expedicao: m.status_pos_expedicao || '',
       motivo_bloqueio: m.motivo_bloqueio || '',
-      semaforo: m.semaforo || '',
     })
-    setMovelTab('contrato')
     setMovelModalOpen(true)
   }
 
@@ -165,7 +147,6 @@ export default function ObraDetalhe() {
     setMovelModalOpen(false)
     setEditingMovel(null)
     setMovelForm({ ...EMPTY_MOVEL })
-    // Limpa o ?item= da URL ao fechar (sem recarregar)
     if (searchParams.get('item')) {
       searchParams.delete('item')
       setSearchParams(searchParams, { replace: true })
@@ -175,19 +156,14 @@ export default function ObraDetalhe() {
   async function handleSaveMovel(e) {
     e.preventDefault()
     const { data: { user } } = await supabase.auth.getUser()
-    const dateFields = [
-      'data_contrato', 'data_medicao', 'data_projeto_aprovado', 'data_amostra_aprovada',
-      'data_inicio_producao', 'previsao_entrega',
-      'data_entrega_canteiro', 'data_inicio_montagem', 'data_montagem_concluida',
-    ]
     const payload = {
       ...movelForm,
       quantidade: parseInt(movelForm.quantidade) || 1,
-      semaforo: movelForm.semaforo || null,
-      ultima_atualizacao_em: new Date().toISOString(),
+      previsao_entrega: movelForm.previsao_entrega || null,
+      status_pos_expedicao: movelForm.status_pos_expedicao || null,
+      motivo_bloqueio: movelForm.motivo_bloqueio || null,
       ultima_atualizacao_por: user?.email || 'desconhecido',
     }
-    dateFields.forEach(f => { if (!payload[f]) payload[f] = null })
     if (editingMovel) {
       await supabase.from('moveis').update(payload).eq('id', editingMovel.id)
     } else {
@@ -565,19 +541,18 @@ export default function ObraDetalhe() {
       {/* TAB: Itens */}
       {tab === 'moveis' && (
         <div>
-          {/* KPIs por semáforo */}
+          {/* KPIs por semáforo (calculado) */}
           {moveis.length > 0 && (() => {
-            const cont = { verde: 0, amarelo: 0, vermelho: 0, sem: 0 }
+            const cont = { verde: 0, amarelo: 0, vermelho: 0 }
             moveis.forEach(m => {
-              if (m.semaforo) cont[m.semaforo]++
-              else cont.sem++
+              const cor = calcularSemaforo(m, pendenciasDoItem(m.id))
+              cont[cor]++
             })
             return (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              <div className="grid grid-cols-3 gap-2 mb-3">
                 <SemaforoChip cor="#10b981" label="Verde" count={cont.verde} ativo={filtroSemaforo === 'verde'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'verde' ? '' : 'verde')} />
                 <SemaforoChip cor="#f59e0b" label="Amarelo" count={cont.amarelo} ativo={filtroSemaforo === 'amarelo'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'amarelo' ? '' : 'amarelo')} />
                 <SemaforoChip cor="#ef4444" label="Vermelho" count={cont.vermelho} ativo={filtroSemaforo === 'vermelho'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'vermelho' ? '' : 'vermelho')} />
-                <SemaforoChip cor="#9ca3af" label="Sem cor" count={cont.sem} ativo={filtroSemaforo === 'sem'} onClick={() => setFiltroSemaforo(filtroSemaforo === 'sem' ? '' : 'sem')} />
               </div>
             )
           })()}
@@ -619,13 +594,13 @@ export default function ObraDetalhe() {
             </CardBody></Card>
           ) : (() => {
             const filtrados = moveis.filter(m => {
-              if (filtroSemaforo === 'sem' && m.semaforo) return false
-              if (filtroSemaforo && filtroSemaforo !== 'sem' && m.semaforo !== filtroSemaforo) return false
+              if (filtroSemaforo) {
+                const cor = calcularSemaforo(m, pendenciasDoItem(m.id))
+                if (cor !== filtroSemaforo) return false
+              }
               if (filtroResp) {
                 const r = filtroResp.toLowerCase()
-                const a = (m.responsavel_producao || '').toLowerCase()
-                const b = (m.responsavel_acompanhamento || '').toLowerCase()
-                if (!a.includes(r) && !b.includes(r)) return false
+                if (!(m.responsavel || '').toLowerCase().includes(r)) return false
               }
               if (buscaItem) {
                 const q = buscaItem.toLowerCase()
@@ -650,16 +625,16 @@ export default function ObraDetalhe() {
                         <th className="text-left px-3 py-2.5 font-medium text-gray-500">Item</th>
                         <th className="text-left px-3 py-2.5 font-medium text-gray-500">Status</th>
                         <th className="text-left px-3 py-2.5 font-medium text-gray-500">Sem.</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-gray-500">Resp. prod.</th>
+                        <th className="text-left px-3 py-2.5 font-medium text-gray-500">Responsável</th>
                         <th className="text-left px-3 py-2.5 font-medium text-gray-500">Prev. entrega</th>
-                        <th className="text-left px-3 py-2.5 font-medium text-gray-500">Última atual.</th>
                         <th className="text-right px-3 py-2.5 font-medium text-gray-500">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filtrados.map(m => {
                         const etapa = calcularEtapaItem(m, pecasDoItem(m.id))
-                        const semInfo = m.semaforo ? SEMAFORO_MAP[m.semaforo] : null
+                        const cor = calcularSemaforo(m, pendenciasDoItem(m.id))
+                        const semInfo = SEMAFORO[cor]
                         return (
                           <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={() => openEditMovel(m)}>
                             <td className="px-3 py-2.5 font-mono font-medium text-gray-900 whitespace-nowrap">{m.codigo}</td>
@@ -668,15 +643,12 @@ export default function ObraDetalhe() {
                             <td className="px-3 py-2.5 whitespace-nowrap">
                               <StatusBadge label={etapa.label} cor={etapa.cor} />
                             </td>
-                            <td className="px-3 py-2.5 whitespace-nowrap text-base">
-                              {semInfo ? <span title={semInfo.label}>{semInfo.label.split(' ')[0]}</span> : <span className="text-gray-300">—</span>}
+                            <td className="px-3 py-2.5 whitespace-nowrap text-base" title={semInfo.label}>
+                              {semInfo.label.split(' ')[0]}
                             </td>
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{m.responsavel_producao || '—'}</td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{m.responsavel || '—'}</td>
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
                               {m.previsao_entrega ? new Date(m.previsao_entrega).toLocaleDateString('pt-BR') : '—'}
-                            </td>
-                            <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
-                              {m.ultima_atualizacao_em ? `${new Date(m.ultima_atualizacao_em).toLocaleDateString('pt-BR')} · ${m.ultima_atualizacao_por || ''}` : '—'}
                             </td>
                             <td className="px-3 py-2.5 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
@@ -768,160 +740,107 @@ export default function ObraDetalhe() {
         </CardBody></Card>
       )}
 
-      {/* MODAL: Item */}
+      {/* MODAL: Item (scroll único) */}
       <Modal open={movelModalOpen} onClose={closeMovelModal} title={editingMovel ? `Editar Item ${editingMovel.codigo || ''}` : 'Novo Item'} size="lg">
-        {/* Status atual + sugestão (apenas no modo edição) */}
+        {/* Status + semáforo (modo edição) */}
         {editingMovel && (() => {
           const etapa = calcularEtapaItem(movelForm, pecasDoItem(editingMovel.id))
+          const cor = calcularSemaforo(movelForm, pendenciasDoItem(editingMovel.id))
+          const semInfo = SEMAFORO[cor]
           return (
-            <div className="mb-3 p-3 rounded-lg border border-gray-200 bg-gray-50 flex items-center gap-3 flex-wrap">
-              <span className="text-xs text-gray-500 uppercase">Status atual:</span>
+            <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50 flex items-center gap-3 flex-wrap">
+              <span className="text-xs text-gray-500 uppercase">Status:</span>
               <StatusBadge label={etapa.label} cor={etapa.cor} />
+              <span className="text-xs text-gray-500 uppercase ml-2">Semáforo:</span>
+              <span className="text-base" title={semInfo.label}>{semInfo.label.split(' ')[0]}</span>
               {etapa.id === 'bloqueado' && etapa.motivo && (
-                <span className="text-xs text-red-600">— {etapa.motivo}</span>
+                <span className="text-xs text-red-600 ml-auto">⚠ {etapa.motivo}</span>
               )}
             </div>
           )
         })()}
 
-        {/* Tabs do modal */}
-        <div className="flex gap-1 mb-4 border-b border-gray-200">
-          <ModalTabBtn current={movelTab} value="contrato" onClick={setMovelTab} label="Contrato" />
-          <ModalTabBtn current={movelTab} value="status" onClick={setMovelTab} label="Status & Datas" />
-          <ModalTabBtn current={movelTab} value="pendencias" onClick={setMovelTab} label={`Pendências${editingMovel ? ` (${pendenciasDoItem(editingMovel.id).length})` : ''}`} disabled={!editingMovel} />
-        </div>
+        <form onSubmit={handleSaveMovel} className="space-y-4">
+          {/* === Identificação === */}
+          <div className="grid grid-cols-3 gap-2">
+            <Input label="Código *" value={movelForm.codigo} onChange={e => setMovelForm({ ...movelForm, codigo: e.target.value })} required />
+            <Input label="Ambiente" value={movelForm.ambiente} onChange={e => setMovelForm({ ...movelForm, ambiente: e.target.value })} />
+            <Input label="Quantidade" type="number" min="1" value={movelForm.quantidade} onChange={e => setMovelForm({ ...movelForm, quantidade: e.target.value })} />
+          </div>
+          <Input label="Nome (curto) *" value={movelForm.nome} onChange={e => setMovelForm({ ...movelForm, nome: e.target.value })} required />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+            <textarea value={movelForm.descricao} onChange={e => setMovelForm({ ...movelForm, descricao: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <Input label="Dimensões" value={movelForm.dimensoes} onChange={e => setMovelForm({ ...movelForm, dimensoes: e.target.value })} placeholder="4,45x2,80m" />
 
-        <form onSubmit={handleSaveMovel} className="space-y-3">
-          {/* TAB Contrato */}
-          {movelTab === 'contrato' && (
-            <>
-              <div className="grid grid-cols-3 gap-2">
-                <Input label="Código *" value={movelForm.codigo} onChange={e => setMovelForm({ ...movelForm, codigo: e.target.value })} required />
-                <Input label="Ambiente" value={movelForm.ambiente} onChange={e => setMovelForm({ ...movelForm, ambiente: e.target.value })} />
-                <Input label="Quantidade" type="number" min="1" value={movelForm.quantidade} onChange={e => setMovelForm({ ...movelForm, quantidade: e.target.value })} />
-              </div>
-              <Input label="Nome (curto) *" value={movelForm.nome} onChange={e => setMovelForm({ ...movelForm, nome: e.target.value })} required />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                <textarea value={movelForm.descricao} onChange={e => setMovelForm({ ...movelForm, descricao: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-              </div>
-              <Input label="Dimensões" value={movelForm.dimensoes} onChange={e => setMovelForm({ ...movelForm, dimensoes: e.target.value })} placeholder="4,45x2,80m" />
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Acabamento Interno</label>
-                  <textarea value={movelForm.acabamento_interno} onChange={e => setMovelForm({ ...movelForm, acabamento_interno: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Acabamento Externo</label>
-                  <textarea value={movelForm.acabamento_externo} onChange={e => setMovelForm({ ...movelForm, acabamento_externo: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Incluído</label>
-                  <textarea value={movelForm.incluido} onChange={e => setMovelForm({ ...movelForm, incluido: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Não Incluído</label>
-                  <textarea value={movelForm.nao_incluido} onChange={e => setMovelForm({ ...movelForm, nao_incluido: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                </div>
-              </div>
-              <Input label="Projeto recebido" value={movelForm.projeto_recebido} onChange={e => setMovelForm({ ...movelForm, projeto_recebido: e.target.value })} />
-              <Input label="Observações" value={movelForm.observacoes} onChange={e => setMovelForm({ ...movelForm, observacoes: e.target.value })} />
-            </>
-          )}
+          {/* === Acabamentos === */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Acabamento Interno</label>
+              <textarea value={movelForm.acabamento_interno} onChange={e => setMovelForm({ ...movelForm, acabamento_interno: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Acabamento Externo</label>
+              <textarea value={movelForm.acabamento_externo} onChange={e => setMovelForm({ ...movelForm, acabamento_externo: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Incluído</label>
+              <textarea value={movelForm.incluido} onChange={e => setMovelForm({ ...movelForm, incluido: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Não Incluído</label>
+              <textarea value={movelForm.nao_incluido} onChange={e => setMovelForm({ ...movelForm, nao_incluido: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+          </div>
 
-          {/* TAB Status & Datas */}
-          {movelTab === 'status' && (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                <Input label="Responsável produção" value={movelForm.responsavel_producao} onChange={e => setMovelForm({ ...movelForm, responsavel_producao: e.target.value })} placeholder="Marceneiro / equipe" />
-                <Input label="Responsável acompanhamento" value={movelForm.responsavel_acompanhamento} onChange={e => setMovelForm({ ...movelForm, responsavel_acompanhamento: e.target.value })} placeholder="Quem acompanha" />
-              </div>
+          {/* === Acompanhamento === */}
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-xs uppercase tracking-wide font-medium text-gray-500 mb-2">Acompanhamento</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Input label="Responsável" value={movelForm.responsavel} onChange={e => setMovelForm({ ...movelForm, responsavel: e.target.value })} placeholder="Marceneiro / equipe" />
+              <Input label="Previsão entrega" type="date" value={movelForm.previsao_entrega} onChange={e => setMovelForm({ ...movelForm, previsao_entrega: e.target.value })} />
+            </div>
+            <div className="mt-2">
+              <Select
+                label="Status pós-expedição (sobrescreve status das peças)"
+                value={movelForm.status_pos_expedicao}
+                onChange={e => setMovelForm({ ...movelForm, status_pos_expedicao: e.target.value })}
+                placeholder="— ainda em produção —"
+                options={Object.values(STATUS_POS_EXPEDICAO).map(s => ({ value: s.id, label: s.label }))}
+              />
+            </div>
+            <div className="mt-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Motivo de bloqueio (vazio = não bloqueado)</label>
+              <textarea
+                value={movelForm.motivo_bloqueio}
+                onChange={e => setMovelForm({ ...movelForm, motivo_bloqueio: e.target.value })}
+                rows={2}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Ex: Aguardando aprovação do cliente"
+              />
+            </div>
+          </div>
 
-              <div className="pt-2">
-                <p className="text-xs uppercase tracking-wide font-medium text-gray-500 mb-2">Datas-chave do ciclo</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <Input label="Data contrato" type="date" value={movelForm.data_contrato} onChange={e => setMovelForm({ ...movelForm, data_contrato: e.target.value })} />
-                  <Input label="Prazo (texto)" value={movelForm.prazo_contrato} onChange={e => setMovelForm({ ...movelForm, prazo_contrato: e.target.value })} placeholder="60 DIAS" />
-                  <Input label="Previsão entrega" type="date" value={movelForm.previsao_entrega} onChange={e => setMovelForm({ ...movelForm, previsao_entrega: e.target.value })} />
-                </div>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  <Input label="Medição" type="date" value={movelForm.data_medicao} onChange={e => setMovelForm({ ...movelForm, data_medicao: e.target.value })} />
-                  <Input label="Projeto aprovado" type="date" value={movelForm.data_projeto_aprovado} onChange={e => setMovelForm({ ...movelForm, data_projeto_aprovado: e.target.value })} />
-                  <Input label="Amostra aprovada" type="date" value={movelForm.data_amostra_aprovada} onChange={e => setMovelForm({ ...movelForm, data_amostra_aprovada: e.target.value })} />
-                </div>
-                <div className="grid grid-cols-1 gap-2 mt-2">
-                  <Input label="Início produção" type="date" value={movelForm.data_inicio_producao} onChange={e => setMovelForm({ ...movelForm, data_inicio_producao: e.target.value })} />
-                </div>
-              </div>
+          {/* === Notas === */}
+          <Input label="Projeto recebido" value={movelForm.projeto_recebido} onChange={e => setMovelForm({ ...movelForm, projeto_recebido: e.target.value })} />
+          <Input label="Observações" value={movelForm.observacoes} onChange={e => setMovelForm({ ...movelForm, observacoes: e.target.value })} />
 
-              <div className="pt-2">
-                <p className="text-xs uppercase tracking-wide font-medium text-gray-500 mb-2">Pós-expedição (preenche para sobrescrever o status auto das peças)</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <Input label="Entregue no canteiro" type="date" value={movelForm.data_entrega_canteiro} onChange={e => setMovelForm({ ...movelForm, data_entrega_canteiro: e.target.value })} />
-                  <Input label="Início montagem" type="date" value={movelForm.data_inicio_montagem} onChange={e => setMovelForm({ ...movelForm, data_inicio_montagem: e.target.value })} />
-                  <Input label="Montagem concluída" type="date" value={movelForm.data_montagem_concluida} onChange={e => setMovelForm({ ...movelForm, data_montagem_concluida: e.target.value })} />
-                </div>
-              </div>
-
-              <div className="pt-2 p-3 rounded-lg border border-amber-200 bg-amber-50/40">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={movelForm.bloqueado} onChange={e => setMovelForm({ ...movelForm, bloqueado: e.target.checked })} className="w-4 h-4 cursor-pointer" />
-                  <Lock size={14} className="text-amber-700" />
-                  <span className="text-sm font-medium text-amber-900">Bloqueado / Parado / Pendente</span>
-                </label>
-                {movelForm.bloqueado && (
-                  <div className="mt-2">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Motivo do bloqueio</label>
-                    <textarea value={movelForm.motivo_bloqueio} onChange={e => setMovelForm({ ...movelForm, motivo_bloqueio: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Ex: Aguardando aprovação do cliente" />
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Semáforo</label>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <select
-                    value={movelForm.semaforo}
-                    onChange={e => setMovelForm({ ...movelForm, semaforo: e.target.value })}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">— sem cor —</option>
-                    {SEMAFORO.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                  {(() => {
-                    const sugestao = sugerirSemaforo(movelForm, editingMovel ? pendenciasDoItem(editingMovel.id) : [], calcularEtapaItem(movelForm, editingMovel ? pecasDoItem(editingMovel.id) : []))
-                    if (sugestao === movelForm.semaforo) return null
-                    const sInfo = SEMAFORO_MAP[sugestao]
-                    return (
-                      <button type="button" onClick={() => setMovelForm({ ...movelForm, semaforo: sugestao })} className="text-xs text-gray-600 hover:text-gray-900 underline cursor-pointer">
-                        Sugerido: {sInfo.label} (clique para aceitar)
-                      </button>
-                    )
-                  })()}
-                </div>
-              </div>
-
-              {editingMovel?.ultima_atualizacao_em && (
-                <p className="text-xs text-gray-400 pt-1">
-                  Última atualização: {new Date(editingMovel.ultima_atualizacao_em).toLocaleString('pt-BR')} · {editingMovel.ultima_atualizacao_por || ''}
+          {/* === Pendências do item === */}
+          {editingMovel && (
+            <div className="pt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wide font-medium text-gray-500">
+                  Pendências do item ({pendenciasDoItem(editingMovel.id).length})
                 </p>
-              )}
-            </>
-          )}
-
-          {/* TAB Pendências do item */}
-          {movelTab === 'pendencias' && editingMovel && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-500">Pendências vinculadas a este item</p>
                 <Btn type="button" size="sm" onClick={() => openNewPend(editingMovel.id)}>
-                  <Plus size={14} /> Nova pendência
+                  <Plus size={14} /> Nova
                 </Btn>
               </div>
               {pendenciasDoItem(editingMovel.id).length === 0 ? (
-                <Card><CardBody className="text-center py-6 text-sm text-gray-500">Nenhuma pendência vinculada a este item.</CardBody></Card>
+                <p className="text-xs text-gray-400 italic">Nenhuma pendência vinculada</p>
               ) : (
                 <div className="space-y-1.5">
                   {pendenciasDoItem(editingMovel.id).map(p => {
@@ -947,6 +866,12 @@ export default function ObraDetalhe() {
                 </div>
               )}
             </div>
+          )}
+
+          {editingMovel?.ultima_atualizacao_por && (
+            <p className="text-xs text-gray-400 pt-1">
+              Última atualização: {editingMovel.ultima_atualizacao_por}
+            </p>
           )}
 
           <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
@@ -1049,26 +974,6 @@ function TabBtn({ current, value, onClick, icon: Icon, label }) {
       }`}
     >
       <Icon size={15} /> {label}
-    </button>
-  )
-}
-
-function ModalTabBtn({ current, value, onClick, label, disabled }) {
-  const active = current === value
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onClick(value)}
-      className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
-        disabled
-          ? 'border-transparent text-gray-300 cursor-not-allowed'
-          : active
-          ? 'border-primary-600 text-primary-700 cursor-pointer'
-          : 'border-transparent text-gray-500 hover:text-gray-700 cursor-pointer'
-      }`}
-    >
-      {label}
     </button>
   )
 }

@@ -40,14 +40,19 @@ export const ETAPA_ITEM_DERIVADA = {
   expedido:       { id: 'expedido',       label: 'Expedido',            cor: '#f59e0b' },
 }
 
-// Semáforo de saúde do item (manual + sugestão automática)
-export const SEMAFORO = [
-  { value: 'verde',    label: '🟢 Verde',    cor: '#10b981' },
-  { value: 'amarelo',  label: '🟡 Amarelo',  cor: '#f59e0b' },
-  { value: 'vermelho', label: '🔴 Vermelho', cor: '#ef4444' },
-]
+// Status pós-expedição (preenchido manualmente quando ocorre — não há scanner no canteiro)
+export const STATUS_POS_EXPEDICAO = {
+  entregue_canteiro: { id: 'entregue_canteiro', label: 'Entregue no canteiro', cor: '#f97316' },
+  em_montagem:       { id: 'em_montagem',       label: 'Em montagem',          cor: '#ea580c' },
+  entregue:          { id: 'entregue',          label: 'Entregue',             cor: '#10b981' },
+}
 
-export const SEMAFORO_MAP = Object.fromEntries(SEMAFORO.map(s => [s.value, s]))
+// Cores do semáforo (sempre calculado, nunca armazenado)
+export const SEMAFORO = {
+  verde:    { value: 'verde',    label: '🟢 Verde',    cor: '#10b981' },
+  amarelo:  { value: 'amarelo',  label: '🟡 Amarelo',  cor: '#f59e0b' },
+  vermelho: { value: 'vermelho', label: '🔴 Vermelho', cor: '#ef4444' },
+}
 
 export function proximaEtapa(etapaAtual) {
   const idx = ETAPAS.findIndex(e => e.id === etapaAtual)
