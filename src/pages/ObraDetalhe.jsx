@@ -13,6 +13,7 @@ import {
 } from '../lib/templates'
 import { Btn, Input, Select, Card, CardBody, Badge, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
+import AnexosObra from '../components/AnexosObra'
 
 const EMPTY_MOVEL = {
   codigo: '', nome: '', ambiente: '', descricao: '', dimensoes: '',
@@ -588,14 +589,8 @@ export default function ObraDetalhe() {
         </div>
       )}
 
-      {/* TAB: Anexos (placeholder Fase 3) */}
-      {tab === 'anexos' && (
-        <Card><CardBody className="text-center py-12">
-          <Paperclip size={48} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500">Anexos virão em breve (Fase 3)</p>
-          <p className="text-xs text-gray-400 mt-1">Upload de fotos da medição, projetos PDF, amostras...</p>
-        </CardBody></Card>
-      )}
+      {/* TAB: Anexos */}
+      {tab === 'anexos' && <AnexosObra obraId={id} />}
 
       {/* TAB: Relatório (placeholder Fase 4) */}
       {tab === 'relatorio' && (
