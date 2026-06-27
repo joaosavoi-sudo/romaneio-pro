@@ -29,6 +29,17 @@ export const MATERIAIS = [
   'HDF', 'Fórmica', 'Vidro', 'Espelho', 'Acrílico', 'Outro',
 ]
 
+// Papéis da equipe (cadastro de pessoas). Também base para controle de acesso futuro.
+export const PAPEIS_EQUIPE = [
+  { id: 'gestao',   label: 'Gestão' },
+  { id: 'producao', label: 'Produção / Marcenaria' },
+  { id: 'montagem', label: 'Montagem' },
+  { id: 'compras',  label: 'Compras' },
+  { id: 'outro',    label: 'Outro' },
+]
+
+export const PAPEL_EQUIPE_MAP = Object.fromEntries(PAPEIS_EQUIPE.map(p => [p.id, p]))
+
 // Fases macro do cronograma da obra — barra única = 100% do prazo.
 // pct = percentual padrão (editável por obra via obras.cronograma_fases).
 export const CRONOGRAMA_FASES_PADRAO = [

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { diasAte } from '../lib/itemStatus'
 import { TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP, STATUS_PENDENCIA_MAP } from '../lib/templates'
 import { Btn, Card, CardBody, Select, Badge } from '../components/ui'
+import ResponsavelInput from '../components/ResponsavelInput'
 
 export default function Pendencias() {
   const navigate = useNavigate()
@@ -145,12 +146,12 @@ export default function Pendencias() {
             options={TIPOS_PENDENCIA.map(t => ({ value: t.id, label: t.label }))}
           />
         </div>
-        <input
-          type="text"
+        <ResponsavelInput
+          label=""
           value={filtroResp}
           onChange={e => setFiltroResp(e.target.value)}
           placeholder="Responsável..."
-          className="px-3 py-2 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 w-44"
+          className="w-44"
         />
         {(filtroObra || filtroTipo || filtroResp || filtroFoco || busca) && (
           <button onClick={() => { setFiltroObra(''); setFiltroTipo(''); setFiltroResp(''); setFiltroFoco(''); setBusca('') }} className="text-xs text-gray-500 hover:text-gray-700 underline cursor-pointer">

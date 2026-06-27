@@ -6,6 +6,7 @@ import { SEMAFORO } from '../lib/constants'
 import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
 import { Btn, Card, CardBody, Select } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
+import ResponsavelInput from '../components/ResponsavelInput'
 
 export default function Itens() {
   const navigate = useNavigate()
@@ -185,12 +186,12 @@ export default function Itens() {
             options={obras.map(o => ({ value: o.id, label: `${o.codigo} — ${o.cliente}` }))}
           />
         </div>
-        <input
-          type="text"
+        <ResponsavelInput
+          label=""
           value={filtroResp}
           onChange={e => setFiltroResp(e.target.value)}
           placeholder="Responsável..."
-          className="px-3 py-2 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 w-48"
+          className="w-48"
         />
         {(filtroObra || filtroSemaforo || filtroResp || busca) && (
           <button onClick={() => { setFiltroObra(''); setFiltroSemaforo(''); setFiltroResp(''); setBusca('') }} className="text-xs text-gray-500 hover:text-gray-700 underline cursor-pointer">

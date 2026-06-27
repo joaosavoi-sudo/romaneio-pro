@@ -18,6 +18,7 @@ import StatusBadge from '../components/StatusBadge'
 import AnexosObra from '../components/AnexosObra'
 import CronogramaBar from '../components/CronogramaBar'
 import CronogramaEditorModal from '../components/CronogramaEditorModal'
+import ResponsavelInput from '../components/ResponsavelInput'
 
 const EMPTY_MOVEL = {
   codigo: '', nome: '', ambiente: '', descricao: '', dimensoes: '',
@@ -772,7 +773,7 @@ export default function ObraDetalhe() {
           <div className="pt-2 border-t border-gray-100">
             <p className="text-xs uppercase tracking-wide font-medium text-gray-500 mb-2">Acompanhamento</p>
             <div className="grid grid-cols-2 gap-2">
-              <Input label="Responsável" value={movelForm.responsavel} onChange={e => setMovelForm({ ...movelForm, responsavel: e.target.value })} placeholder="Marceneiro / equipe" />
+              <ResponsavelInput value={movelForm.responsavel} onChange={e => setMovelForm({ ...movelForm, responsavel: e.target.value })} placeholder="Marceneiro / equipe" />
               <Input label="Previsão entrega" type="date" value={movelForm.previsao_entrega} onChange={e => setMovelForm({ ...movelForm, previsao_entrega: e.target.value })} />
             </div>
             <div className="mt-2">
@@ -898,7 +899,7 @@ export default function ObraDetalhe() {
             <textarea value={pendForm.descricao} onChange={e => setPendForm({ ...pendForm, descricao: e.target.value })} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Input label="Responsável" value={pendForm.responsavel} onChange={e => setPendForm({ ...pendForm, responsavel: e.target.value })} />
+            <ResponsavelInput value={pendForm.responsavel} onChange={e => setPendForm({ ...pendForm, responsavel: e.target.value })} />
             <Input label="Prazo" type="date" value={pendForm.prazo} onChange={e => setPendForm({ ...pendForm, prazo: e.target.value })} />
           </div>
           <div className="flex justify-end gap-2 pt-2">

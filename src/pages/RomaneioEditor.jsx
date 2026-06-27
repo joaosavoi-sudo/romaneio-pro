@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { MATERIAIS, gerarCodigo } from '../lib/constants'
 import { Btn, Input, Select, Card, CardBody, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
+import ResponsavelInput from '../components/ResponsavelInput'
 
 const EMPTY_PECA = {
   nome: '', largura: '', altura: '', profundidade: '',
@@ -193,14 +194,14 @@ export default function RomaneioEditor() {
       <Card className="mb-4">
         <CardBody>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Input
+            <ResponsavelInput
               label="Marceneiro responsável"
               value={marceneiro}
               onChange={e => setMarceneiro(e.target.value)}
               onBlur={salvarCabecalho}
               placeholder="Nome do marceneiro"
             />
-            <Input
+            <ResponsavelInput
               label="Responsável pelo romaneio"
               value={responsavel}
               onChange={e => setResponsavel(e.target.value)}
