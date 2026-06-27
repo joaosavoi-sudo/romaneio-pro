@@ -28,7 +28,7 @@ export default function RelatorioObra() {
       supabase.from('obras').select('*').eq('id', id).single(),
       supabase.from('pendencias').select('*').eq('obra_id', id).eq('status', 'aberta').order('prazo', { ascending: true, nullsLast: true }),
       supabase.from('romaneios').select('id, pecas(id, etapa)').eq('obra_id', id),
-      supabase.from('moveis').select('id').eq('obra_id', id),
+      supabase.from('moveis').select('id, codigo, nome, descricao, ambiente, previsao_entrega, data_inicio, prazo_dias, cronograma_fases').eq('obra_id', id).order('codigo', { ascending: true }),
     ])
     setObra(obraRes.data)
     setPendencias(pendRes.data || [])
@@ -133,6 +133,45 @@ export default function RelatorioObra() {
           </Secao>
         )}
 
+        {/* Previsão por item */}
+        {moveis.length > 0 && (
+          <Secao titulo="Previsão por item">
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8pt' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', textAlign: 'left' }}>
+                  <th style={{ padding: '3px 6px', fontWeight: 600 }}>Item</th>
+                  <th style={{ padding: '3px 6px', fontWeight: 600 }}>Descrição</th>
+                  <th style={{ padding: '3px 6px', fontWeight: 600, textAlign: 'right' }}>Previsão</th>
+                  <th style={{ padding: '3px 6px', fontWeight: 600, textAlign: 'right' }}>vs. prazo da obra</th>
+                </tr>
+              </thead>
+              <tbody>
+                {moveis.map(m => {
+                  const desvio = desvioVsMacro(m.previsao_entrega, obra.data_entrega_prometida)
+                  const divergente = desvio !== null && desvio !== 0
+                  const corDesvio = desvio === null ? '#9ca3af' : desvio > 0 ? '#ef4444' : desvio < 0 ? '#2563eb' : '#10b981'
+                  return (
+                    <tr key={m.id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: divergente ? '#fff7ed' : 'transparent' }}>
+                      <td style={{ padding: '3px 6px', fontWeight: 600, color: '#111827', whiteSpace: 'nowrap' }}>{m.codigo}</td>
+                      <td style={{ padding: '3px 6px', color: '#374151' }}>{m.descricao || m.nome || '—'}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151', whiteSpace: 'nowrap' }}>
+                        {m.previsao_entrega ? new Date(m.previsao_entrega).toLocaleDateString('pt-BR') : '—'}
+                      </td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', fontWeight: 600, color: corDesvio, whiteSpace: 'nowrap' }}>
+                        {desvio === null ? '—' : desvio === 0 ? 'no prazo' : `${desvio > 0 ? '+' : ''}${desvio}d`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <p style={{ fontSize: '7pt', color: '#9ca3af', marginTop: '4px' }}>
+              Desvio em relação à entrega prevista da obra ({obra.data_entrega_prometida ? new Date(obra.data_entrega_prometida).toLocaleDateString('pt-BR') : '—'}).
+              Linhas destacadas têm previsão diferente do prazo macro.
+            </p>
+          </Secao>
+        )}
+
         {/* Distribuição de peças */}
         {totalPecas > 0 && (
           <Secao titulo="Produção das peças">
@@ -218,6 +257,16 @@ export default function RelatorioObra() {
       `}</style>
     </div>
   )
+}
+
+// Desvio (em dias) da previsão do item vs. a entrega prevista da obra (prazo macro).
+// null quando faltar alguma das datas. Negativo = antes do macro; positivo = depois.
+function desvioVsMacro(previsaoItem, macroEnd) {
+  if (!previsaoItem || !macroEnd) return null
+  const a = new Date(previsaoItem); a.setHours(0, 0, 0, 0)
+  const b = new Date(macroEnd); b.setHours(0, 0, 0, 0)
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null
+  return Math.round((a.getTime() - b.getTime()) / 86400000)
 }
 
 function Secao({ titulo, children }) {

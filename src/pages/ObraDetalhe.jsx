@@ -6,17 +6,18 @@ import {
   ListChecks, Search,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, CRONOGRAMA_FASES_PADRAO } from '../lib/constants'
+import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO } from '../lib/constants'
 import {
   PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
   STATUS_PENDENCIA_MAP,
 } from '../lib/templates'
 import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
-import { getFases, calcFases, temCronograma, somaPct, dataEntregaDerivada, fmtData } from '../lib/cronograma'
+import { getFases, calcFases, temCronograma, dataEntregaDerivada, fmtData, cronogramaEfetivo } from '../lib/cronograma'
 import { Btn, Input, Select, Card, CardBody, Badge, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 import AnexosObra from '../components/AnexosObra'
 import CronogramaBar from '../components/CronogramaBar'
+import CronogramaEditorModal from '../components/CronogramaEditorModal'
 
 const EMPTY_MOVEL = {
   codigo: '', nome: '', ambiente: '', descricao: '', dimensoes: '',
@@ -31,22 +32,14 @@ const EMPTY_MOVEL = {
 
 const EMPTY_PENDENCIA = { tipo: 'cliente', titulo: '', descricao: '', responsavel: '', prazo: '', movel_id: '' }
 
-// Ajusta o % da fase `idx` compensando na fase seguinte (mantém soma = 100).
-// Pura: recebe e devolve o cronoForm sem efeitos colaterais.
-function setFasePctPure(form, idx, valor) {
-  const fases = form.fases.map(f => ({ ...f }))
-  const novo = Math.max(0, Math.min(100, Math.round(Number(valor) || 0)))
-  const delta = novo - fases[idx].pct
-  const proxIdx = idx + 1
-  if (proxIdx < fases.length) {
-    const ajustado = fases[proxIdx].pct - delta
-    if (ajustado < 0) return form // não deixa a fase seguinte ficar negativa
-    fases[idx].pct = novo
-    fases[proxIdx].pct = ajustado
-  } else {
-    fases[idx].pct = novo
+// Monta o valor inicial do editor de cronograma a partir de uma fonte (obra ou item).
+function buildCronoValor(src) {
+  const fases = getFases(src)
+  return {
+    data_inicio: src?.data_inicio || '',
+    prazo_dias: src?.prazo_dias || '',
+    fases: fases.map(f => ({ chave: f.chave, label: f.label, cor: f.cor, pct: f.pct })),
   }
-  return { ...form, fases }
 }
 
 export default function ObraDetalhe() {
@@ -72,7 +65,8 @@ export default function ObraDetalhe() {
   const [pendForm, setPendForm] = useState({ ...EMPTY_PENDENCIA })
 
   const [cronoModalOpen, setCronoModalOpen] = useState(false)
-  const [cronoForm, setCronoForm] = useState({ data_inicio: '', prazo_dias: '', fases: [] })
+  const [cronoTarget, setCronoTarget] = useState({ tipo: 'obra' }) // { tipo:'obra' } | { tipo:'item', movel }
+  const [cronoValor, setCronoValor] = useState({ data_inicio: '', prazo_dias: '', fases: [] })
 
   const [aplicarTemplateOpen, setAplicarTemplateOpen] = useState(false)
 
@@ -248,52 +242,50 @@ export default function ObraDetalhe() {
 
   // ===== Cronograma (barra de fases) =====
   function openCronoModal() {
-    const fases = getFases(obra)
-    setCronoForm({
-      data_inicio: obra.data_inicio || '',
-      prazo_dias: obra.prazo_dias || '',
-      fases: fases.map(f => ({ chave: f.chave, label: f.label, cor: f.cor, pct: f.pct })),
-    })
+    setCronoTarget({ tipo: 'obra' })
+    setCronoValor(buildCronoValor(obra))
     setCronoModalOpen(true)
   }
 
-  function restaurarPadraoCrono() {
-    setCronoForm(prev => ({
-      ...prev,
-      fases: CRONOGRAMA_FASES_PADRAO.map(f => ({ chave: f.chave, label: f.label, cor: f.cor, pct: f.pct })),
-    }))
+  // Abre o editor para um item — herda o cronograma da obra se o item ainda não tiver o seu.
+  function openCronoModalItem(movel) {
+    setCronoTarget({ tipo: 'item', movel })
+    setCronoValor(buildCronoValor(cronogramaEfetivo(movel, obra)))
+    setCronoModalOpen(true)
   }
 
-  // Edita o % de uma fase compensando na fase seguinte (mantém soma travada).
-  function setFasePct(idx, valor) {
-    setCronoForm(prev => setFasePctPure(prev, idx, valor))
-  }
-
-  // Edita a data-fim de uma fase (boundary): converte para % e rebalanceia a seguinte.
-  function setFaseDataFim(idx, dataStr) {
-    setCronoForm(prev => {
-      const prazo = Number(prev.prazo_dias)
-      if (!prev.data_inicio || !(prazo > 0) || !dataStr) return prev
-      const ini = new Date(prev.data_inicio); ini.setHours(0, 0, 0, 0)
-      const fim = new Date(dataStr); fim.setHours(0, 0, 0, 0)
-      const diasDecorridos = Math.round((fim - ini) / 86400000)
-      const fimPctAlvo = Math.max(0, Math.min(100, (diasDecorridos / prazo) * 100))
-      const inicioPct = prev.fases.slice(0, idx).reduce((a, f) => a + f.pct, 0)
-      const novoPct = Math.max(0, Math.round(fimPctAlvo - inicioPct))
-      return setFasePctPure(prev, idx, novoPct)
-    })
-  }
-
-  async function handleSaveCrono(e) {
-    e.preventDefault()
-    const prazo = Number(cronoForm.prazo_dias)
-    if (!cronoForm.data_inicio || !(prazo > 0) || somaPct(cronoForm.fases) !== 100) return
-    await supabase.from('obras').update({
-      data_inicio: cronoForm.data_inicio,
-      prazo_dias: prazo,
-      cronograma_fases: cronoForm.fases.map(f => ({ chave: f.chave, pct: Number(f.pct) })),
-      data_entrega_prometida: dataEntregaDerivada(cronoForm.data_inicio, prazo),
-    }).eq('id', id)
+  async function handleSaveCrono(payload) {
+    const entrega = dataEntregaDerivada(payload.data_inicio, payload.prazo_dias)
+    if (cronoTarget.tipo === 'item') {
+      const novo = {
+        data_inicio: payload.data_inicio,
+        prazo_dias: payload.prazo_dias,
+        cronograma_fases: payload.cronograma_fases,
+        previsao_entrega: entrega, // mantém semáforo/Dashboard em sync
+      }
+      await supabase.from('moveis').update(novo).eq('id', cronoTarget.movel.id)
+      // Reflete na hora no modal do item aberto
+      setEditingMovel(prev => (prev && prev.id === cronoTarget.movel.id ? { ...prev, ...novo } : prev))
+      setMovelForm(prev => ({ ...prev, previsao_entrega: entrega }))
+    } else {
+      await supabase.from('obras').update({
+        data_inicio: payload.data_inicio,
+        prazo_dias: payload.prazo_dias,
+        cronograma_fases: payload.cronograma_fases,
+        data_entrega_prometida: entrega,
+      }).eq('id', id)
+      // Aplica aos itens — só preenche os que ainda não têm cronograma próprio.
+      const semCrono = moveis.filter(m => !temCronograma(m))
+      await Promise.all(semCrono.map(m => {
+        const upd = {
+          data_inicio: payload.data_inicio,
+          prazo_dias: payload.prazo_dias,
+          cronograma_fases: payload.cronograma_fases,
+        }
+        if (!m.previsao_entrega) upd.previsao_entrega = entrega
+        return supabase.from('moveis').update(upd).eq('id', m.id)
+      }))
+    }
     setCronoModalOpen(false)
     loadData()
   }
@@ -804,6 +796,28 @@ export default function ObraDetalhe() {
             </div>
           </div>
 
+          {/* === Cronograma do item === */}
+          {editingMovel && (
+            <div className="pt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wide font-medium text-gray-500">Cronograma do item</p>
+                <Btn type="button" size="sm" variant="secondary" onClick={() => openCronoModalItem(editingMovel)}>
+                  <Calendar size={14} /> {temCronograma(editingMovel) ? 'Editar' : 'Personalizar'}
+                </Btn>
+              </div>
+              {temCronograma(editingMovel) ? (
+                <CronogramaBar obra={editingMovel} compact />
+              ) : temCronograma(obra) ? (
+                <>
+                  <p className="text-xs text-gray-500 mb-2 italic">Seguindo o cronograma da obra.</p>
+                  <CronogramaBar obra={obra} compact />
+                </>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Defina o cronograma da obra primeiro, ou clique em Personalizar para criar um específico do item.</p>
+              )}
+            </div>
+          )}
+
           {/* === Notas === */}
           <Input label="Projeto recebido" value={movelForm.projeto_recebido} onChange={e => setMovelForm({ ...movelForm, projeto_recebido: e.target.value })} />
           <Input label="Observações" value={movelForm.observacoes} onChange={e => setMovelForm({ ...movelForm, observacoes: e.target.value })} />
@@ -894,98 +908,14 @@ export default function ObraDetalhe() {
         </form>
       </Modal>
 
-      {/* MODAL: Cronograma */}
-      <Modal open={cronoModalOpen} onClose={() => setCronoModalOpen(false)} title="Cronograma da obra">
-        <form onSubmit={handleSaveCrono} className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              label="Data de início *"
-              type="date"
-              value={cronoForm.data_inicio}
-              onChange={e => setCronoForm({ ...cronoForm, data_inicio: e.target.value })}
-              required
-            />
-            <Input
-              label="Prazo total (dias) *"
-              type="number"
-              min="1"
-              value={cronoForm.prazo_dias}
-              onChange={e => setCronoForm({ ...cronoForm, prazo_dias: e.target.value })}
-              placeholder="Ex: 120"
-              required
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">Fases (% do prazo)</label>
-              <button type="button" onClick={restaurarPadraoCrono} className="text-xs text-primary-600 hover:underline cursor-pointer">
-                Restaurar padrão
-              </button>
-            </div>
-            {(() => {
-              const prazo = Number(cronoForm.prazo_dias)
-              const podeData = !!cronoForm.data_inicio && prazo > 0
-              const calc = podeData
-                ? calcFases({ data_inicio: cronoForm.data_inicio, prazo_dias: prazo, cronograma_fases: cronoForm.fases })
-                : []
-              return (
-                <div className="space-y-2">
-                  {cronoForm.fases.map((f, idx) => {
-                    const ultima = idx === cronoForm.fases.length - 1
-                    return (
-                      <div key={f.chave} className="flex items-center gap-2 flex-wrap">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: f.cor }} />
-                        <span className="text-sm text-gray-700 flex-1 min-w-[140px]">{f.label}</span>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={f.pct}
-                            onChange={e => setFasePct(idx, e.target.value)}
-                            className="w-16 px-2 py-1.5 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
-                          />
-                          <span className="text-sm text-gray-500">%</span>
-                        </div>
-                        {podeData && (
-                          <input
-                            type="date"
-                            value={calc[idx]?.dataFim ? toInputDate(calc[idx].dataFim) : ''}
-                            onChange={e => setFaseDataFim(idx, e.target.value)}
-                            disabled={ultima}
-                            title={ultima ? 'A última fase termina na data de entrega' : 'Data-fim desta fase'}
-                            className="px-2 py-1.5 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })()}
-            {(() => {
-              const soma = somaPct(cronoForm.fases)
-              const ok = soma === 100
-              return (
-                <p className={`text-xs mt-2 font-medium ${ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                  Soma: {soma}% {ok ? '✓' : '— ajuste para fechar 100%'}
-                </p>
-              )
-            })()}
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Btn type="button" variant="secondary" onClick={() => setCronoModalOpen(false)}>Cancelar</Btn>
-            <Btn
-              type="submit"
-              disabled={somaPct(cronoForm.fases) !== 100 || !cronoForm.data_inicio || !(Number(cronoForm.prazo_dias) > 0)}
-            >
-              Salvar cronograma
-            </Btn>
-          </div>
-        </form>
-      </Modal>
+      {/* MODAL: Cronograma (obra ou item) */}
+      <CronogramaEditorModal
+        open={cronoModalOpen}
+        onClose={() => setCronoModalOpen(false)}
+        titulo={cronoTarget.tipo === 'item' ? `Cronograma do item ${cronoTarget.movel?.codigo || ''}` : 'Cronograma da obra'}
+        valorInicial={cronoValor}
+        onSave={handleSaveCrono}
+      />
 
       {/* MODAL: Aplicar pendências sugeridas */}
       <Modal open={aplicarTemplateOpen} onClose={() => setAplicarTemplateOpen(false)} title="Aplicar pendências sugeridas">
@@ -1004,16 +934,6 @@ export default function ObraDetalhe() {
       </Modal>
     </div>
   )
-}
-
-// Date → 'yyyy-mm-dd' para popular <input type="date">.
-function toInputDate(d) {
-  const dt = d instanceof Date ? d : new Date(d)
-  if (isNaN(dt.getTime())) return ''
-  const y = dt.getFullYear()
-  const m = String(dt.getMonth() + 1).padStart(2, '0')
-  const dd = String(dt.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
 }
 
 function TabBtn({ current, value, onClick, icon: Icon, label }) {
