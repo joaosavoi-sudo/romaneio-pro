@@ -1,5 +1,79 @@
-import { CRONOGRAMA_FASES_PADRAO } from './constants'
+import { CRONOGRAMA_FASES_PADRAO, ETAPAS } from './constants'
 import { diasAte } from './itemStatus'
+
+// Ordem das etapas de peça (do scanner), para comparar "alcançou etapa X".
+const ETAPA_ORDER = ETAPAS.map(e => e.id)
+const idxEtapa = e => ETAPA_ORDER.indexOf(e)
+
+// Índice da 1ª etapa de cada fase macro do cronograma (mapa acordado com a gestão):
+//   Fabricação           = pré-montagem + romaneio        (entra em idx 0)
+//   Acabamento/vistoria/embalagem = acabamento + conferência + embalagem (idx 2)
+//   Montagem             = expedição + pós  → ignorado por ora (sem scanner no canteiro)
+const FASE_DESDE_IDX = { fabricacao: 0, acabamento: idxEtapa('acabamento') }
+// Limite (saída) de cada fase = entrada na fase seguinte:
+const FASE_ATE_IDX = { fabricacao: idxEtapa('acabamento'), acabamento: idxEtapa('expedicao') }
+
+// Deriva as DATAS REAIS de cada fase a partir do histórico das peças (peca_historico).
+// Retorna { fabricacao?: {inicio, fim}, acabamento?: {inicio, fim} } com Date.
+//   - inicio = primeira peça a entrar na fase
+//   - fim    = quando a última peça saiu da fase (entrou na seguinte); null = em andamento
+export function calcRealizado(pecas, historico) {
+  if (!pecas || pecas.length === 0) return {}
+
+  // primeira data em que cada peça entrou em cada etapa
+  const firstEntry = {} // peca_id -> { etapa -> ms }
+  for (const h of historico || []) {
+    if (!h.etapa_nova || !h.created_at) continue
+    const t = new Date(h.created_at).getTime()
+    if (isNaN(t)) continue
+    const m = firstEntry[h.peca_id] || (firstEntry[h.peca_id] = {})
+    if (m[h.etapa_nova] == null || t < m[h.etapa_nova]) m[h.etapa_nova] = t
+  }
+
+  // primeira vez que a peça atingiu uma etapa de índice >= k (robusto a pulos de etapa)
+  const primeiroAlcance = (p, k) => {
+    const m = firstEntry[p.id] || {}
+    let min = null
+    ETAPA_ORDER.forEach((e, i) => {
+      if (i >= k && m[e] != null && (min == null || m[e] < min)) min = m[e]
+    })
+    return min
+  }
+  const alcancou = (p, k) => idxEtapa(p.etapa) >= k || primeiroAlcance(p, k) != null
+
+  const minMs = arr => (arr.length ? Math.min(...arr) : null)
+  const maxMs = arr => (arr.length ? Math.max(...arr) : null)
+  const toDate = ms => (ms == null ? null : new Date(ms))
+
+  function faseRealizada(chave) {
+    const desde = FASE_DESDE_IDX[chave]
+    const ate = FASE_ATE_IDX[chave]
+    // início: primeira peça a entrar na fase
+    const entradas = pecas.map(p => {
+      if (chave === 'fabricacao' && p.created_at) {
+        // peça nasce em "romaneio" (sem registro de histórico) → usa a criação
+        const c = new Date(p.created_at).getTime()
+        const h = primeiroAlcance(p, desde)
+        return isNaN(c) ? h : (h == null ? c : Math.min(c, h))
+      }
+      return primeiroAlcance(p, desde)
+    }).filter(v => v != null)
+    const inicio = minMs(entradas)
+    if (inicio == null) return null
+    // fim: só quando TODAS as peças saíram da fase (entraram na seguinte)
+    const todasSairam = pecas.every(p => alcancou(p, ate))
+    const saidas = pecas.map(p => primeiroAlcance(p, ate)).filter(v => v != null)
+    const fim = todasSairam && saidas.length ? maxMs(saidas) : null
+    return { inicio: toDate(inicio), fim: toDate(fim) }
+  }
+
+  const res = {}
+  const fab = faseRealizada('fabricacao')
+  if (fab) res.fabricacao = fab
+  const acab = faseRealizada('acabamento')
+  if (acab) res.acabamento = acab
+  return res
+}
 
 // Soma uma quantidade de dias a uma data ISO/Date. Devolve Date.
 export function addDays(data, dias) {

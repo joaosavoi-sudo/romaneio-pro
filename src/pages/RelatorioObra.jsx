@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Btn, Card, CardBody } from '../components/ui'
 import { ETAPAS } from '../lib/constants'
 import { TIPO_PENDENCIA_MAP } from '../lib/templates'
-import { temCronograma } from '../lib/cronograma'
+import { temCronograma, calcRealizado } from '../lib/cronograma'
 import CronogramaBar from '../components/CronogramaBar'
 
 export default function RelatorioObra() {
@@ -16,6 +16,7 @@ export default function RelatorioObra() {
   const [pendencias, setPendencias] = useState([])
   const [pecas, setPecas] = useState([])
   const [moveis, setMoveis] = useState([])
+  const [pecaHistorico, setPecaHistorico] = useState([])
   const [loading, setLoading] = useState(true)
   const [proximos, setProximos] = useState('')
   const [saving, setSaving] = useState(false)
@@ -27,7 +28,7 @@ export default function RelatorioObra() {
     const [obraRes, pendRes, romsRes, movRes] = await Promise.all([
       supabase.from('obras').select('*').eq('id', id).single(),
       supabase.from('pendencias').select('*').eq('obra_id', id).eq('status', 'aberta').order('prazo', { ascending: true, nullsLast: true }),
-      supabase.from('romaneios').select('id, pecas(id, etapa)').eq('obra_id', id),
+      supabase.from('romaneios').select('id, pecas(id, etapa, created_at)').eq('obra_id', id),
       supabase.from('moveis').select('id, codigo, nome, descricao, ambiente, previsao_entrega, data_inicio, prazo_dias, cronograma_fases').eq('obra_id', id).order('codigo', { ascending: true }),
     ])
     setObra(obraRes.data)
@@ -36,6 +37,15 @@ export default function RelatorioObra() {
     setPecas(allPecas)
     setMoveis(movRes.data || [])
     setProximos(obraRes.data?.proximos_passos || '')
+
+    const pecaIds = allPecas.map(p => p.id)
+    if (pecaIds.length > 0) {
+      const { data: hist } = await supabase
+        .from('peca_historico')
+        .select('peca_id, etapa_nova, created_at')
+        .in('peca_id', pecaIds)
+      setPecaHistorico(hist || [])
+    }
     setLoading(false)
   }
 
@@ -129,7 +139,7 @@ export default function RelatorioObra() {
         {/* Cronograma */}
         {temCronograma(obra) && (
           <Secao titulo={`Cronograma (${obra.prazo_dias} dias)`}>
-            <CronogramaBar obra={obra} />
+            <CronogramaBar obra={obra} realizado={calcRealizado(pecas, pecaHistorico)} />
           </Secao>
         )}
 

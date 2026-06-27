@@ -12,7 +12,7 @@ import {
   STATUS_PENDENCIA_MAP,
 } from '../lib/templates'
 import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
-import { getFases, calcFases, temCronograma, dataEntregaDerivada, fmtData, cronogramaEfetivo } from '../lib/cronograma'
+import { getFases, calcFases, temCronograma, dataEntregaDerivada, fmtData, cronogramaEfetivo, calcRealizado } from '../lib/cronograma'
 import { Btn, Input, Select, Card, CardBody, Badge, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 import AnexosObra from '../components/AnexosObra'
@@ -52,6 +52,7 @@ export default function ObraDetalhe() {
   const [romaneios, setRomaneios] = useState([])
   const [moveis, setMoveis] = useState([])
   const [pendencias, setPendencias] = useState([])
+  const [pecaHistorico, setPecaHistorico] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [tab, setTab] = useState('overview')
@@ -94,7 +95,7 @@ export default function ObraDetalhe() {
   async function loadData() {
     const [obraRes, romRes, movRes, pendRes] = await Promise.all([
       supabase.from('obras').select('*').eq('id', id).single(),
-      supabase.from('romaneios').select('*, pecas(id, etapa, movel_id)').eq('obra_id', id).order('created_at', { ascending: false }),
+      supabase.from('romaneios').select('*, pecas(id, etapa, movel_id, created_at)').eq('obra_id', id).order('created_at', { ascending: false }),
       supabase.from('moveis').select('*').eq('obra_id', id).order('codigo', { ascending: true }),
       supabase.from('pendencias').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
     ])
@@ -102,11 +103,24 @@ export default function ObraDetalhe() {
     setRomaneios(romRes.data || [])
     setMoveis(movRes.data || [])
     setPendencias(pendRes.data || [])
+
+    // Histórico das peças da obra → base do "realizado" no cronograma
+    const pecaIds = (romRes.data || []).flatMap(r => (r.pecas || []).map(p => p.id))
+    if (pecaIds.length > 0) {
+      const { data: hist } = await supabase
+        .from('peca_historico')
+        .select('peca_id, etapa_nova, created_at')
+        .in('peca_id', pecaIds)
+      setPecaHistorico(hist || [])
+    } else {
+      setPecaHistorico([])
+    }
     setLoading(false)
   }
 
   // Helpers de derivação por item
   const todasPecas = romaneios.flatMap(r => r.pecas || [])
+  const realizadoObra = calcRealizado(todasPecas, pecaHistorico)
   function pecasDoItem(movelId) { return todasPecas.filter(p => p.movel_id === movelId) }
   function pendenciasDoItem(movelId) { return pendencias.filter(p => p.movel_id === movelId) }
 
@@ -374,7 +388,7 @@ export default function ObraDetalhe() {
                   <h3 className="font-semibold text-gray-900">Cronograma</h3>
                   <button onClick={() => setTab('cronograma')} className="text-xs text-primary-600 hover:underline cursor-pointer">Ver tudo</button>
                 </div>
-                <CronogramaBar obra={obra} compact />
+                <CronogramaBar obra={obra} compact realizado={realizadoObra} />
               </CardBody>
             </Card>
           )}
@@ -500,7 +514,7 @@ export default function ObraDetalhe() {
           </div>
 
           {temCronograma(obra) ? (
-            <Card><CardBody><CronogramaBar obra={obra} /></CardBody></Card>
+            <Card><CardBody><CronogramaBar obra={obra} realizado={realizadoObra} /></CardBody></Card>
           ) : (
             <Card><CardBody className="text-center py-12">
               <Calendar size={48} className="mx-auto text-gray-300 mb-3" />
