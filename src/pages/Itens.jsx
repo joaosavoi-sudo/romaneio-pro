@@ -24,6 +24,7 @@ export default function Itens() {
   })
   const [filtroResp, setFiltroResp] = useState('')
   const [busca, setBusca] = useState('')
+  const [incluirArquivadas, setIncluirArquivadas] = useState(false)
   const [ordenacao, setOrdenacao] = useState({ campo: 'codigo', dir: 'asc' })
 
   useEffect(() => { loadData() }, [])
@@ -72,6 +73,7 @@ export default function Itens() {
 
   const filtrados = useMemo(() => {
     let arr = moveis.filter(m => {
+      if (!incluirArquivadas && m.obras?.status !== 'ativa') return false
       if (filtroObra && m.obras?.id !== filtroObra) return false
       if (filtroSemaforo) {
         const cor = calcularSemaforo(m, pendenciasPorMovel[m.id] || [])
@@ -98,7 +100,7 @@ export default function Itens() {
       return ordenacao.dir === 'asc' ? cmp : -cmp
     })
     return arr
-  }, [moveis, pendenciasPorMovel, filtroObra, filtroSemaforo, filtroResp, busca, ordenacao])
+  }, [moveis, pendenciasPorMovel, filtroObra, filtroSemaforo, filtroResp, busca, incluirArquivadas, ordenacao])
 
   const cont = { verde: 0, amarelo: 0, vermelho: 0 }
   filtrados.forEach(m => {
@@ -198,8 +200,12 @@ export default function Itens() {
             Limpar filtros
           </button>
         )}
-        <span className="text-xs text-gray-500 ml-auto">
-          {filtrados.length} de {moveis.length} item(ns)
+        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer ml-auto">
+          <input type="checkbox" checked={incluirArquivadas} onChange={e => setIncluirArquivadas(e.target.checked)} className="w-3.5 h-3.5 cursor-pointer" />
+          Incluir obras concluídas
+        </label>
+        <span className="text-xs text-gray-500">
+          {filtrados.length} item(ns)
         </span>
       </div>
 

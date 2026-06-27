@@ -3,10 +3,10 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, ClipboardList, Trash2, Box, Pencil,
   AlertCircle, Calendar, Paperclip, FileBarChart, LayoutGrid,
-  ListChecks, Search,
+  ListChecks, Search, CheckCircle2, RotateCcw,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO } from '../lib/constants'
+import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, OBRA_STATUS } from '../lib/constants'
 import {
   PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
   STATUS_PENDENCIA_MAP,
@@ -318,11 +318,19 @@ export default function ObraDetalhe() {
     loadData()
   }
 
+  // ===== Status da obra (concluir/reabrir) =====
+  async function mudarStatusObra(novo) {
+    await supabase.from('obras').update({ status: novo }).eq('id', id)
+    loadData()
+  }
+
   // ===== Renderização =====
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
   if (!obra) return <p className="text-center text-red-500 py-12">Obra não encontrada</p>
 
   const pendAbertas = pendencias.filter(p => p.status === 'aberta')
+  const statusObraInfo = OBRA_STATUS.find(s => s.id === obra.status)
+  const todosEntregues = moveis.length > 0 && moveis.every(m => m.status_pos_expedicao === 'entregue')
   const fasesCronograma = calcFases(obra)
   const dataFimObra = fasesCronograma[fasesCronograma.length - 1]?.dataFim
 
@@ -344,13 +352,11 @@ export default function ObraDetalhe() {
       </button>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-2xl font-bold text-gray-900">{obra.codigo}</h2>
-            <Badge color={obra.status === 'ativa' ? '#10b981' : obra.status === 'concluida' ? '#3b82f6' : '#ef4444'}>
-              {obra.status}
-            </Badge>
+            <Badge color={statusObraInfo?.cor || '#6b7280'}>{statusObraInfo?.label || obra.status}</Badge>
             {pendAbertas.length > 0 && (
               <Badge color="#f59e0b">{pendAbertas.length} pendência(s)</Badge>
             )}
@@ -359,7 +365,26 @@ export default function ObraDetalhe() {
           {obra.endereco && <p className="text-sm text-gray-400">{obra.endereco}</p>}
           {obra.arquiteto && <p className="text-sm text-gray-400">Arquiteto: {obra.arquiteto}</p>}
         </div>
+        <div className="flex items-center gap-2">
+          {obra.status === 'ativa' ? (
+            <Btn size="sm" variant="secondary" onClick={() => mudarStatusObra('concluida')}>
+              <CheckCircle2 size={15} /> Concluir obra
+            </Btn>
+          ) : (
+            <Btn size="sm" variant="secondary" onClick={() => mudarStatusObra('ativa')}>
+              <RotateCcw size={15} /> Reabrir obra
+            </Btn>
+          )}
+        </div>
       </div>
+
+      {/* Sugestão: tudo entregue → concluir */}
+      {obra.status === 'ativa' && todosEntregues && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex-wrap">
+          <p className="text-sm text-emerald-800">✅ Todos os itens foram entregues. Deseja concluir esta obra?</p>
+          <Btn size="sm" onClick={() => mudarStatusObra('concluida')}>Concluir obra</Btn>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">

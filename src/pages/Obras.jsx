@@ -8,6 +8,7 @@ import { Btn, Input, Select, Modal, Card, CardBody, Badge } from '../components/
 export default function Obras() {
   const [obras, setObras] = useState([])
   const [search, setSearch] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('ativa') // '' = todas
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({ codigo: '', cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
@@ -65,10 +66,16 @@ export default function Obras() {
     setModalOpen(true)
   }
 
-  const filtered = obras.filter(o =>
-    o.cliente?.toLowerCase().includes(search.toLowerCase()) ||
-    o.codigo?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = obras.filter(o => {
+    if (filtroStatus && o.status !== filtroStatus) return false
+    const q = search.toLowerCase()
+    return (o.cliente?.toLowerCase().includes(q) || o.codigo?.toLowerCase().includes(q))
+  })
+
+  const statusCounts = obras.reduce((acc, o) => {
+    acc[o.status] = (acc[o.status] || 0) + 1
+    return acc
+  }, {})
 
   function countPecas(obra) {
     let total = 0
@@ -81,7 +88,7 @@ export default function Obras() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Obras</h2>
-          <p className="text-sm text-gray-500">{obras.length} obra(s) cadastrada(s)</p>
+          <p className="text-sm text-gray-500">{filtered.length} de {obras.length} obra(s)</p>
         </div>
         <Btn onClick={openNew}>
           <Plus size={18} /> Nova Obra
@@ -98,6 +105,12 @@ export default function Obras() {
             onChange={e => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <StatusTab label="Ativas" count={statusCounts.ativa || 0} ativo={filtroStatus === 'ativa'} onClick={() => setFiltroStatus('ativa')} />
+          <StatusTab label="Concluídas" count={statusCounts.concluida || 0} ativo={filtroStatus === 'concluida'} onClick={() => setFiltroStatus('concluida')} />
+          <StatusTab label="Canceladas" count={statusCounts.cancelada || 0} ativo={filtroStatus === 'cancelada'} onClick={() => setFiltroStatus('cancelada')} />
+          <StatusTab label="Todas" count={obras.length} ativo={filtroStatus === ''} onClick={() => setFiltroStatus('')} />
         </div>
       </div>
 
@@ -183,5 +196,20 @@ export default function Obras() {
         </form>
       </Modal>
     </div>
+  )
+}
+
+function StatusTab({ label, count, ativo, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+        ativo
+          ? 'bg-primary-50 border-primary-300 text-primary-700'
+          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+      }`}
+    >
+      {label} <span className={ativo ? 'text-primary-500' : 'text-gray-400'}>({count})</span>
+    </button>
   )
 }
