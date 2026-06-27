@@ -9,6 +9,7 @@ import RomaneioEditor from './pages/RomaneioEditor'
 import RomaneioImprimir from './pages/RomaneioImprimir'
 import Romaneios from './pages/Romaneios'
 import Itens from './pages/Itens'
+import Pendencias from './pages/Pendencias'
 import RelatorioObra from './pages/RelatorioObra'
 import Pecas from './pages/Pecas'
 import Scanner from './pages/Scanner'
@@ -50,6 +51,7 @@ export default function App() {
       <Route path="/obras/:id" element={<ProtectedRoute user={user}><ObraDetalhe /></ProtectedRoute>} />
       <Route path="/obras/:id/relatorio" element={<ProtectedRoute user={user}><RelatorioObra /></ProtectedRoute>} />
       <Route path="/itens" element={<ProtectedRoute user={user}><Itens /></ProtectedRoute>} />
+      <Route path="/pendencias" element={<ProtectedRoute user={user}><Pendencias /></ProtectedRoute>} />
       <Route path="/romaneios" element={<ProtectedRoute user={user}><Romaneios /></ProtectedRoute>} />
       <Route path="/romaneio/:id" element={<ProtectedRoute user={user}><RomaneioEditor /></ProtectedRoute>} />
       <Route path="/romaneio/:id/imprimir" element={<ProtectedRoute user={user}><RomaneioImprimir /></ProtectedRoute>} />

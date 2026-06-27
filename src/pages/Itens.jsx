@@ -223,6 +223,7 @@ export default function Itens() {
                   <ThSort label="Ambiente" campo="ambiente" ordenacao={ordenacao} onClick={ordenarPor} />
                   <th className="text-left px-3 py-2.5 font-medium text-gray-500">Descrição</th>
                   <th className="text-left px-3 py-2.5 font-medium text-gray-500">Status</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-gray-500">Progresso</th>
                   <th className="text-left px-3 py-2.5 font-medium text-gray-500">Sem.</th>
                   <ThSort label="Responsável" campo="responsavel" ordenacao={ordenacao} onClick={ordenarPor} />
                   <ThSort label="Prev. entrega" campo="previsao_entrega" ordenacao={ordenacao} onClick={ordenarPor} />
@@ -233,6 +234,10 @@ export default function Itens() {
                   const etapa = calcularEtapaItem(m, pecasPorMovel[m.id] || [])
                   const cor = calcularSemaforo(m, pendenciasPorMovel[m.id] || [])
                   const semInfo = SEMAFORO[cor]
+                  const pecasItem = pecasPorMovel[m.id] || []
+                  const totPecas = pecasItem.length
+                  const expedidas = pecasItem.filter(p => p.etapa === 'expedicao').length
+                  const pctItem = totPecas > 0 ? Math.round((expedidas / totPecas) * 100) : null
                   return (
                     <tr
                       key={m.id}
@@ -247,6 +252,18 @@ export default function Itens() {
                       <td className="px-3 py-2.5 text-gray-700 max-w-[280px] truncate" title={m.descricao || m.nome}>{m.descricao || m.nome}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <StatusBadge label={etapa.label} cor={etapa.cor} />
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {pctItem === null ? (
+                          <span className="text-xs text-gray-400">—</span>
+                        ) : (
+                          <div className="flex items-center gap-2" title={`${expedidas}/${totPecas} peças expedidas`}>
+                            <div className="w-20 bg-gray-100 rounded-full h-2 overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${pctItem}%`, backgroundColor: pctItem === 100 ? '#10b981' : '#3b82f6' }} />
+                            </div>
+                            <span className="text-xs text-gray-500 tabular-nums">{pctItem}%</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-base" title={semInfo.label}>
                         {semInfo.label.split(' ')[0]}
