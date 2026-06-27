@@ -29,6 +29,15 @@ export const MATERIAIS = [
   'HDF', 'Fórmica', 'Vidro', 'Espelho', 'Acrílico', 'Outro',
 ]
 
+// Fases macro do cronograma da obra — barra única = 100% do prazo.
+// pct = percentual padrão (editável por obra via obras.cronograma_fases).
+export const CRONOGRAMA_FASES_PADRAO = [
+  { chave: 'definicoes', label: 'Definições / Alocação de equipe',  pct: 10, cor: '#3b82f6' },
+  { chave: 'fabricacao', label: 'Fabricação',                       pct: 40, cor: '#f59e0b' },
+  { chave: 'acabamento', label: 'Acabamento, vistoria e embalagem', pct: 15, cor: '#8b5cf6' },
+  { chave: 'montagem',   label: 'Montagem e finalização',           pct: 35, cor: '#10b981' },
+]
+
 // Status macro do item, derivado das etapas das peças (não persistido).
 // Ordem importa: prioridade do mais "à frente" no fluxo.
 export const ETAPA_ITEM_DERIVADA = {

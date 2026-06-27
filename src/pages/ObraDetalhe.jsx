@@ -3,18 +3,20 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, ClipboardList, Trash2, Box, Pencil,
   AlertCircle, Calendar, Paperclip, FileBarChart, LayoutGrid,
-  CheckCircle2, Clock, AlertTriangle, ListChecks, Search,
+  ListChecks, Search,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO } from '../lib/constants'
+import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, CRONOGRAMA_FASES_PADRAO } from '../lib/constants'
 import {
-  MARCOS_PADRAO, PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
-  STATUS_PENDENCIA_MAP, STATUS_MARCO_MAP, FASES, FASE_MAP, isAtrasado,
+  PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
+  STATUS_PENDENCIA_MAP,
 } from '../lib/templates'
 import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
+import { getFases, calcFases, temCronograma, somaPct, dataEntregaDerivada, fmtData } from '../lib/cronograma'
 import { Btn, Input, Select, Card, CardBody, Badge, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 import AnexosObra from '../components/AnexosObra'
+import CronogramaBar from '../components/CronogramaBar'
 
 const EMPTY_MOVEL = {
   codigo: '', nome: '', ambiente: '', descricao: '', dimensoes: '',
@@ -28,7 +30,24 @@ const EMPTY_MOVEL = {
 }
 
 const EMPTY_PENDENCIA = { tipo: 'cliente', titulo: '', descricao: '', responsavel: '', prazo: '', movel_id: '' }
-const EMPTY_MARCO = { fase: 'pre_producao', marco: '', label: '', data_alvo: '', responsavel: '', observacoes: '' }
+
+// Ajusta o % da fase `idx` compensando na fase seguinte (mantém soma = 100).
+// Pura: recebe e devolve o cronoForm sem efeitos colaterais.
+function setFasePctPure(form, idx, valor) {
+  const fases = form.fases.map(f => ({ ...f }))
+  const novo = Math.max(0, Math.min(100, Math.round(Number(valor) || 0)))
+  const delta = novo - fases[idx].pct
+  const proxIdx = idx + 1
+  if (proxIdx < fases.length) {
+    const ajustado = fases[proxIdx].pct - delta
+    if (ajustado < 0) return form // não deixa a fase seguinte ficar negativa
+    fases[idx].pct = novo
+    fases[proxIdx].pct = ajustado
+  } else {
+    fases[idx].pct = novo
+  }
+  return { ...form, fases }
+}
 
 export default function ObraDetalhe() {
   const { id } = useParams()
@@ -39,7 +58,6 @@ export default function ObraDetalhe() {
   const [romaneios, setRomaneios] = useState([])
   const [moveis, setMoveis] = useState([])
   const [pendencias, setPendencias] = useState([])
-  const [marcos, setMarcos] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [tab, setTab] = useState('overview')
@@ -53,9 +71,8 @@ export default function ObraDetalhe() {
   const [editingPend, setEditingPend] = useState(null)
   const [pendForm, setPendForm] = useState({ ...EMPTY_PENDENCIA })
 
-  const [marcoModalOpen, setMarcoModalOpen] = useState(false)
-  const [editingMarco, setEditingMarco] = useState(null)
-  const [marcoForm, setMarcoForm] = useState({ ...EMPTY_MARCO })
+  const [cronoModalOpen, setCronoModalOpen] = useState(false)
+  const [cronoForm, setCronoForm] = useState({ data_inicio: '', prazo_dias: '', fases: [] })
 
   const [aplicarTemplateOpen, setAplicarTemplateOpen] = useState(false)
 
@@ -80,18 +97,16 @@ export default function ObraDetalhe() {
   }, [moveis, searchParams])
 
   async function loadData() {
-    const [obraRes, romRes, movRes, pendRes, marcosRes] = await Promise.all([
+    const [obraRes, romRes, movRes, pendRes] = await Promise.all([
       supabase.from('obras').select('*').eq('id', id).single(),
       supabase.from('romaneios').select('*, pecas(id, etapa, movel_id)').eq('obra_id', id).order('created_at', { ascending: false }),
       supabase.from('moveis').select('*').eq('obra_id', id).order('codigo', { ascending: true }),
       supabase.from('pendencias').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
-      supabase.from('obra_marcos').select('*').eq('obra_id', id).order('ordem', { ascending: true }),
     ])
     setObra(obraRes.data)
     setRomaneios(romRes.data || [])
     setMoveis(movRes.data || [])
     setPendencias(pendRes.data || [])
-    setMarcos(marcosRes.data || [])
     setLoading(false)
   }
 
@@ -231,90 +246,66 @@ export default function ObraDetalhe() {
     loadData()
   }
 
-  // ===== Marcos =====
-  function openNewMarco() {
-    setEditingMarco(null)
-    setMarcoForm({ ...EMPTY_MARCO })
-    setMarcoModalOpen(true)
-  }
-
-  function openEditMarco(m) {
-    setEditingMarco(m)
-    setMarcoForm({
-      fase: m.fase, marco: m.marco, label: m.marco,
-      data_alvo: m.data_alvo || '', responsavel: m.responsavel || '',
-      observacoes: m.observacoes || '',
+  // ===== Cronograma (barra de fases) =====
+  function openCronoModal() {
+    const fases = getFases(obra)
+    setCronoForm({
+      data_inicio: obra.data_inicio || '',
+      prazo_dias: obra.prazo_dias || '',
+      fases: fases.map(f => ({ chave: f.chave, label: f.label, cor: f.cor, pct: f.pct })),
     })
-    setMarcoModalOpen(true)
+    setCronoModalOpen(true)
   }
 
-  async function handleSaveMarco(e) {
+  function restaurarPadraoCrono() {
+    setCronoForm(prev => ({
+      ...prev,
+      fases: CRONOGRAMA_FASES_PADRAO.map(f => ({ chave: f.chave, label: f.label, cor: f.cor, pct: f.pct })),
+    }))
+  }
+
+  // Edita o % de uma fase compensando na fase seguinte (mantém soma travada).
+  function setFasePct(idx, valor) {
+    setCronoForm(prev => setFasePctPure(prev, idx, valor))
+  }
+
+  // Edita a data-fim de uma fase (boundary): converte para % e rebalanceia a seguinte.
+  function setFaseDataFim(idx, dataStr) {
+    setCronoForm(prev => {
+      const prazo = Number(prev.prazo_dias)
+      if (!prev.data_inicio || !(prazo > 0) || !dataStr) return prev
+      const ini = new Date(prev.data_inicio); ini.setHours(0, 0, 0, 0)
+      const fim = new Date(dataStr); fim.setHours(0, 0, 0, 0)
+      const diasDecorridos = Math.round((fim - ini) / 86400000)
+      const fimPctAlvo = Math.max(0, Math.min(100, (diasDecorridos / prazo) * 100))
+      const inicioPct = prev.fases.slice(0, idx).reduce((a, f) => a + f.pct, 0)
+      const novoPct = Math.max(0, Math.round(fimPctAlvo - inicioPct))
+      return setFasePctPure(prev, idx, novoPct)
+    })
+  }
+
+  async function handleSaveCrono(e) {
     e.preventDefault()
-    const payload = {
-      fase: marcoForm.fase,
-      marco: marcoForm.marco || marcoForm.label,
-      data_alvo: marcoForm.data_alvo || null,
-      responsavel: marcoForm.responsavel,
-      observacoes: marcoForm.observacoes,
-    }
-    if (editingMarco) {
-      await supabase.from('obra_marcos').update(payload).eq('id', editingMarco.id)
-    } else {
-      const ordemMax = Math.max(0, ...marcos.map(m => m.ordem || 0))
-      await supabase.from('obra_marcos').insert({ ...payload, obra_id: id, ordem: ordemMax + 1 })
-    }
-    setMarcoModalOpen(false)
-    setEditingMarco(null)
-    setMarcoForm({ ...EMPTY_MARCO })
+    const prazo = Number(cronoForm.prazo_dias)
+    if (!cronoForm.data_inicio || !(prazo > 0) || somaPct(cronoForm.fases) !== 100) return
+    await supabase.from('obras').update({
+      data_inicio: cronoForm.data_inicio,
+      prazo_dias: prazo,
+      cronograma_fases: cronoForm.fases.map(f => ({ chave: f.chave, pct: Number(f.pct) })),
+      data_entrega_prometida: dataEntregaDerivada(cronoForm.data_inicio, prazo),
+    }).eq('id', id)
+    setCronoModalOpen(false)
     loadData()
   }
 
-  async function toggleMarco(m) {
-    let novoStatus
-    if (m.status === 'concluido') novoStatus = 'pendente'
-    else novoStatus = 'concluido'
-    await supabase.from('obra_marcos').update({
-      status: novoStatus,
-      data_concluido: novoStatus === 'concluido' ? new Date().toISOString().substring(0, 10) : null,
-    }).eq('id', m.id)
-    loadData()
-  }
-
-  async function deleteMarco(marcoId) {
-    if (!confirm('Excluir este marco do cronograma?')) return
-    await supabase.from('obra_marcos').delete().eq('id', marcoId)
-    loadData()
-  }
-
-  // ===== Aplicar templates =====
-  async function aplicarTemplates(opts) {
-    const inserts = []
-    if (opts.marcos) {
-      const existentes = new Set(marcos.map(m => m.marco))
-      MARCOS_PADRAO.forEach(t => {
-        if (!existentes.has(t.marco)) {
-          inserts.push({
-            obra_id: id, fase: t.fase, marco: t.marco, ordem: t.ordem,
-          })
-        }
-      })
-      if (inserts.length > 0) {
-        await supabase.from('obra_marcos').insert(inserts)
-      }
-    }
-    if (opts.pendencias) {
-      const existentes = new Set(pendencias.map(p => p.titulo))
-      const pendInserts = []
-      PENDENCIAS_SUGERIDAS.forEach(t => {
-        if (!existentes.has(t.titulo)) {
-          pendInserts.push({
-            obra_id: id, tipo: t.tipo, titulo: t.titulo,
-          })
-        }
-      })
-      if (pendInserts.length > 0) {
-        await supabase.from('pendencias').insert(pendInserts)
-      }
+  // ===== Aplicar templates (só pendências) =====
+  async function aplicarTemplates() {
+    const existentes = new Set(pendencias.map(p => p.titulo))
+    const pendInserts = PENDENCIAS_SUGERIDAS
+      .filter(t => !existentes.has(t.titulo))
+      .map(t => ({ obra_id: id, tipo: t.tipo, titulo: t.titulo }))
+    if (pendInserts.length > 0) {
+      await supabase.from('pendencias').insert(pendInserts)
     }
     setAplicarTemplateOpen(false)
     loadData()
@@ -325,7 +316,8 @@ export default function ObraDetalhe() {
   if (!obra) return <p className="text-center text-red-500 py-12">Obra não encontrada</p>
 
   const pendAbertas = pendencias.filter(p => p.status === 'aberta')
-  const marcosOrdenados = [...marcos].sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+  const fasesCronograma = calcFases(obra)
+  const dataFimObra = fasesCronograma[fasesCronograma.length - 1]?.dataFim
 
   // KPIs
   const totalPecas = romaneios.reduce((sum, r) => sum + (r.pecas?.length || 0), 0)
@@ -382,16 +374,14 @@ export default function ObraDetalhe() {
             <KpiCard label="Pendências" value={pendAbertas.length} sub="em aberto" cor={pendAbertas.length > 0 ? '#f59e0b' : '#10b981'} />
           </div>
 
-          {marcosOrdenados.length > 0 && (
+          {temCronograma(obra) && (
             <Card>
               <CardBody>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-gray-900">Cronograma resumido</h3>
+                  <h3 className="font-semibold text-gray-900">Cronograma</h3>
                   <button onClick={() => setTab('cronograma')} className="text-xs text-primary-600 hover:underline cursor-pointer">Ver tudo</button>
                 </div>
-                <div className="space-y-2">
-                  {marcosOrdenados.slice(0, 5).map(m => <MarcoLine key={m.id} marco={m} />)}
-                </div>
+                <CronogramaBar obra={obra} compact />
               </CardBody>
             </Card>
           )}
@@ -410,12 +400,15 @@ export default function ObraDetalhe() {
             </Card>
           )}
 
-          {marcosOrdenados.length === 0 && pendencias.length === 0 && (
+          {!temCronograma(obra) && pendencias.length === 0 && (
             <Card>
               <CardBody className="text-center py-12">
                 <ListChecks size={48} className="mx-auto text-gray-300 mb-3" />
                 <p className="text-gray-500 mb-4">Esta obra ainda não tem cronograma nem pendências cadastradas.</p>
-                <Btn onClick={() => setAplicarTemplateOpen(true)}><ListChecks size={16} /> Aplicar templates sugeridos</Btn>
+                <div className="flex justify-center gap-2">
+                  <Btn variant="secondary" onClick={() => setTab('cronograma')}><Calendar size={16} /> Definir cronograma</Btn>
+                  <Btn onClick={() => setAplicarTemplateOpen(true)}><ListChecks size={16} /> Aplicar pendências sugeridas</Btn>
+                </div>
               </CardBody>
             </Card>
           )}
@@ -498,42 +491,29 @@ export default function ObraDetalhe() {
       {tab === 'cronograma' && (
         <div>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <p className="text-sm text-gray-500">{marcos.length} marco(s)</p>
-            <div className="flex gap-2">
-              <Btn variant="secondary" onClick={() => setAplicarTemplateOpen(true)}>
-                <ListChecks size={16} /> Aplicar template
-              </Btn>
-              <Btn onClick={openNewMarco}><Plus size={16} /> Novo Marco</Btn>
+            <div>
+              {temCronograma(obra) ? (
+                <p className="text-sm text-gray-500">
+                  Prazo: <strong className="text-gray-900">{obra.prazo_dias} dias</strong>
+                  {' · '}{fmtData(obra.data_inicio)} → {fmtData(dataFimObra)}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500">Cronograma ainda não definido.</p>
+              )}
             </div>
+            <Btn onClick={openCronoModal}>
+              <Pencil size={16} /> {temCronograma(obra) ? 'Editar cronograma' : 'Definir cronograma'}
+            </Btn>
           </div>
 
-          {marcos.length === 0 ? (
+          {temCronograma(obra) ? (
+            <Card><CardBody><CronogramaBar obra={obra} /></CardBody></Card>
+          ) : (
             <Card><CardBody className="text-center py-12">
               <Calendar size={48} className="mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-500">Nenhum marco cadastrado</p>
+              <p className="text-gray-500 mb-4">Defina a data de início e o prazo total para montar a barra de fases.</p>
+              <Btn onClick={openCronoModal}><Plus size={16} /> Definir cronograma</Btn>
             </CardBody></Card>
-          ) : (
-            <div className="space-y-3">
-              {FASES.map(f => {
-                const lista = marcosOrdenados.filter(m => m.fase === f.id)
-                if (lista.length === 0) return null
-                return (
-                  <Card key={f.id}>
-                    <div className="px-4 py-2 border-b border-gray-100" style={{ backgroundColor: f.cor + '10' }}>
-                      <span className="font-semibold text-sm" style={{ color: f.cor }}>{f.label}</span>
-                      <span className="text-xs text-gray-500 ml-2">({lista.length})</span>
-                    </div>
-                    <div>
-                      {lista.map(m => (
-                        <div key={m.id} className="px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                          <MarcoLine marco={m} editavel onToggle={() => toggleMarco(m)} onEdit={() => openEditMarco(m)} onDelete={() => deleteMarco(m.id)} />
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
           )}
         </div>
       )}
@@ -914,54 +894,126 @@ export default function ObraDetalhe() {
         </form>
       </Modal>
 
-      {/* MODAL: Marco */}
-      <Modal open={marcoModalOpen} onClose={() => setMarcoModalOpen(false)} title={editingMarco ? 'Editar Marco' : 'Novo Marco'}>
-        <form onSubmit={handleSaveMarco} className="space-y-3">
-          <Select
-            label="Fase *"
-            value={marcoForm.fase}
-            onChange={e => setMarcoForm({ ...marcoForm, fase: e.target.value })}
-            options={FASES.map(f => ({ value: f.id, label: f.label }))}
-            required
-          />
-          <Input label="Marco *" value={marcoForm.marco} onChange={e => setMarcoForm({ ...marcoForm, marco: e.target.value })} placeholder="Ex: Aprovação do projeto" required />
+      {/* MODAL: Cronograma */}
+      <Modal open={cronoModalOpen} onClose={() => setCronoModalOpen(false)} title="Cronograma da obra">
+        <form onSubmit={handleSaveCrono} className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
-            <Input label="Data alvo" type="date" value={marcoForm.data_alvo} onChange={e => setMarcoForm({ ...marcoForm, data_alvo: e.target.value })} />
-            <Input label="Responsável" value={marcoForm.responsavel} onChange={e => setMarcoForm({ ...marcoForm, responsavel: e.target.value })} />
+            <Input
+              label="Data de início *"
+              type="date"
+              value={cronoForm.data_inicio}
+              onChange={e => setCronoForm({ ...cronoForm, data_inicio: e.target.value })}
+              required
+            />
+            <Input
+              label="Prazo total (dias) *"
+              type="number"
+              min="1"
+              value={cronoForm.prazo_dias}
+              onChange={e => setCronoForm({ ...cronoForm, prazo_dias: e.target.value })}
+              placeholder="Ex: 120"
+              required
+            />
           </div>
-          <Input label="Observações" value={marcoForm.observacoes} onChange={e => setMarcoForm({ ...marcoForm, observacoes: e.target.value })} />
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">Fases (% do prazo)</label>
+              <button type="button" onClick={restaurarPadraoCrono} className="text-xs text-primary-600 hover:underline cursor-pointer">
+                Restaurar padrão
+              </button>
+            </div>
+            {(() => {
+              const prazo = Number(cronoForm.prazo_dias)
+              const podeData = !!cronoForm.data_inicio && prazo > 0
+              const calc = podeData
+                ? calcFases({ data_inicio: cronoForm.data_inicio, prazo_dias: prazo, cronograma_fases: cronoForm.fases })
+                : []
+              return (
+                <div className="space-y-2">
+                  {cronoForm.fases.map((f, idx) => {
+                    const ultima = idx === cronoForm.fases.length - 1
+                    return (
+                      <div key={f.chave} className="flex items-center gap-2 flex-wrap">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: f.cor }} />
+                        <span className="text-sm text-gray-700 flex-1 min-w-[140px]">{f.label}</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={f.pct}
+                            onChange={e => setFasePct(idx, e.target.value)}
+                            className="w-16 px-2 py-1.5 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                          />
+                          <span className="text-sm text-gray-500">%</span>
+                        </div>
+                        {podeData && (
+                          <input
+                            type="date"
+                            value={calc[idx]?.dataFim ? toInputDate(calc[idx].dataFim) : ''}
+                            onChange={e => setFaseDataFim(idx, e.target.value)}
+                            disabled={ultima}
+                            title={ultima ? 'A última fase termina na data de entrega' : 'Data-fim desta fase'}
+                            className="px-2 py-1.5 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+            {(() => {
+              const soma = somaPct(cronoForm.fases)
+              const ok = soma === 100
+              return (
+                <p className={`text-xs mt-2 font-medium ${ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                  Soma: {soma}% {ok ? '✓' : '— ajuste para fechar 100%'}
+                </p>
+              )
+            })()}
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
-            <Btn type="button" variant="secondary" onClick={() => setMarcoModalOpen(false)}>Cancelar</Btn>
-            <Btn type="submit">{editingMarco ? 'Salvar' : 'Criar Marco'}</Btn>
+            <Btn type="button" variant="secondary" onClick={() => setCronoModalOpen(false)}>Cancelar</Btn>
+            <Btn
+              type="submit"
+              disabled={somaPct(cronoForm.fases) !== 100 || !cronoForm.data_inicio || !(Number(cronoForm.prazo_dias) > 0)}
+            >
+              Salvar cronograma
+            </Btn>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL: Aplicar templates */}
-      <Modal open={aplicarTemplateOpen} onClose={() => setAplicarTemplateOpen(false)} title="Aplicar templates sugeridos">
+      {/* MODAL: Aplicar pendências sugeridas */}
+      <Modal open={aplicarTemplateOpen} onClose={() => setAplicarTemplateOpen(false)} title="Aplicar pendências sugeridas">
         <p className="text-sm text-gray-600 mb-4">
-          O sistema vai criar marcos de cronograma e pendências comuns pra obras de marcenaria.
-          Itens já existentes (mesmo nome) serão pulados.
+          O sistema vai criar pendências comuns pra obras de marcenaria.
+          Pendências já existentes (mesmo título) serão puladas.
         </p>
-        <div className="space-y-2 mb-4">
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="font-medium text-sm text-gray-900 mb-1">📅 Cronograma de marcos ({MARCOS_PADRAO.length} itens)</p>
-            <p className="text-xs text-gray-500">Pré-produção (medição, aprovações), Produção, Pós-produção (entrega, montagem, vistoria)</p>
-          </div>
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="font-medium text-sm text-gray-900 mb-1">📋 Pendências sugeridas ({PENDENCIAS_SUGERIDAS.length} itens)</p>
-            <p className="text-xs text-gray-500">Definições do cliente, medições, compras, canteiro</p>
-          </div>
+        <div className="p-3 bg-gray-50 rounded-lg mb-4">
+          <p className="font-medium text-sm text-gray-900 mb-1">📋 Pendências sugeridas ({PENDENCIAS_SUGERIDAS.length} itens)</p>
+          <p className="text-xs text-gray-500">Definições do cliente, medições, compras, canteiro</p>
         </div>
         <div className="flex justify-end gap-2">
           <Btn variant="secondary" onClick={() => setAplicarTemplateOpen(false)}>Cancelar</Btn>
-          <Btn onClick={() => aplicarTemplates({ marcos: true, pendencias: true })}>
-            Aplicar tudo
-          </Btn>
+          <Btn onClick={aplicarTemplates}>Aplicar pendências</Btn>
         </div>
       </Modal>
     </div>
   )
+}
+
+// Date → 'yyyy-mm-dd' para popular <input type="date">.
+function toInputDate(d) {
+  const dt = d instanceof Date ? d : new Date(d)
+  if (isNaN(dt.getTime())) return ''
+  const y = dt.getFullYear()
+  const m = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
 }
 
 function TabBtn({ current, value, onClick, icon: Icon, label }) {
@@ -1003,44 +1055,6 @@ function KpiCard({ label, value, sub, cor }) {
         {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
       </CardBody>
     </Card>
-  )
-}
-
-function MarcoLine({ marco, editavel, onToggle, onEdit, onDelete }) {
-  const atrasado = isAtrasado(marco)
-  const statusEfetivo = atrasado ? 'atrasado' : marco.status
-  const statusInfo = STATUS_MARCO_MAP[statusEfetivo] || STATUS_MARCO_MAP.pendente
-  const Icon = statusEfetivo === 'concluido' ? CheckCircle2 : statusEfetivo === 'atrasado' ? AlertTriangle : Clock
-
-  return (
-    <div className="flex items-center gap-3 flex-wrap">
-      {editavel ? (
-        <button onClick={onToggle} className="cursor-pointer" title={statusEfetivo === 'concluido' ? 'Desmarcar' : 'Marcar concluído'}>
-          <Icon size={20} style={{ color: statusInfo.cor }} />
-        </button>
-      ) : (
-        <Icon size={20} style={{ color: statusInfo.cor }} />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-sm font-medium ${statusEfetivo === 'concluido' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-            {marco.marco}
-          </span>
-          <Badge color={FASE_MAP[marco.fase]?.cor}>{FASE_MAP[marco.fase]?.label}</Badge>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
-          {marco.data_alvo && <span>📅 alvo: {new Date(marco.data_alvo).toLocaleDateString('pt-BR')}</span>}
-          {marco.data_concluido && <span>✓ concluído: {new Date(marco.data_concluido).toLocaleDateString('pt-BR')}</span>}
-          {marco.responsavel && <span>👤 {marco.responsavel}</span>}
-        </div>
-      </div>
-      {editavel && (
-        <div className="flex items-center gap-1">
-          <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded cursor-pointer"><Pencil size={14} /></button>
-          <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer"><Trash2 size={14} /></button>
-        </div>
-      )}
-    </div>
   )
 }
 

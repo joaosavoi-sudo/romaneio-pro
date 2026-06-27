@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ListChecks, Search, Download, Building2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { SEMAFORO } from '../lib/constants'
@@ -9,6 +9,7 @@ import StatusBadge from '../components/StatusBadge'
 
 export default function Itens() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [moveis, setMoveis] = useState([])
   const [pecasPorMovel, setPecasPorMovel] = useState({})
   const [pendenciasPorMovel, setPendenciasPorMovel] = useState({})
@@ -16,7 +17,10 @@ export default function Itens() {
 
   // Filtros
   const [filtroObra, setFiltroObra] = useState('')
-  const [filtroSemaforo, setFiltroSemaforo] = useState('')
+  const [filtroSemaforo, setFiltroSemaforo] = useState(() => {
+    const s = searchParams.get('semaforo')
+    return ['verde', 'amarelo', 'vermelho'].includes(s) ? s : ''
+  })
   const [filtroResp, setFiltroResp] = useState('')
   const [busca, setBusca] = useState('')
   const [ordenacao, setOrdenacao] = useState({ campo: 'codigo', dir: 'asc' })

@@ -1,13 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, Package, ScanLine, TrendingUp } from 'lucide-react'
+import { Building2, Package, ScanLine, AlertTriangle, CalendarClock, Ban } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { ETAPAS } from '../lib/constants'
+import { ETAPAS, SEMAFORO } from '../lib/constants'
+import { calcularEtapaItem, calcularSemaforo, diasAte } from '../lib/itemStatus'
 import { Card, CardBody } from '../components/ui'
+import StatusBadge from '../components/StatusBadge'
 
-function StatCard({ icon: Icon, label, value, color }) {
+function StatCard({ icon: Icon, label, value, color, onClick }) {
+  const clickable = typeof onClick === 'function'
   return (
-    <Card>
+    <Card
+      className={clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}
+      onClick={onClick}
+    >
       <CardBody className="flex items-center gap-4">
         <div className="p-3 rounded-xl" style={{ backgroundColor: color + '15' }}>
           <Icon size={24} style={{ color }} />
@@ -25,6 +31,9 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ obras: 0, pecas: 0, romaneios: 0 })
   const [etapaCounts, setEtapaCounts] = useState({})
   const [historico, setHistorico] = useState([])
+  const [moveis, setMoveis] = useState([])
+  const [pecasPorMovel, setPecasPorMovel] = useState({})
+  const [pendenciasPorMovel, setPendenciasPorMovel] = useState({})
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -32,11 +41,13 @@ export default function Dashboard() {
   }, [])
 
   async function loadStats() {
-    const [obrasRes, pecasRes, romaneiosRes, historicoRes] = await Promise.all([
+    const [obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes] = await Promise.all([
       supabase.from('obras').select('id', { count: 'exact', head: true }).eq('status', 'ativa'),
-      supabase.from('pecas').select('id, etapa'),
+      supabase.from('pecas').select('id, etapa, movel_id'),
       supabase.from('romaneios').select('id', { count: 'exact', head: true }),
       supabase.from('peca_historico').select('*, pecas(codigo, nome)').order('created_at', { ascending: false }).limit(10),
+      supabase.from('moveis').select('*, obras(id, codigo, cliente, status)').order('codigo', { ascending: true }),
+      supabase.from('pendencias').select('id, status, prazo, movel_id').not('movel_id', 'is', null),
     ])
 
     setStats({
@@ -47,28 +58,184 @@ export default function Dashboard() {
 
     const counts = {}
     ETAPAS.forEach(e => { counts[e.id] = 0 })
+    const idxPecas = {}
     pecasRes.data?.forEach(p => {
       if (counts[p.etapa] !== undefined) counts[p.etapa]++
+      if (p.movel_id) {
+        if (!idxPecas[p.movel_id]) idxPecas[p.movel_id] = []
+        idxPecas[p.movel_id].push(p)
+      }
     })
     setEtapaCounts(counts)
+
+    const idxPend = {}
+    ;(pendRes.data || []).forEach(p => {
+      if (!idxPend[p.movel_id]) idxPend[p.movel_id] = []
+      idxPend[p.movel_id].push(p)
+    })
+
+    setMoveis(moveisRes.data || [])
+    setPecasPorMovel(idxPecas)
+    setPendenciasPorMovel(idxPend)
     setHistorico(historicoRes.data || [])
   }
 
+  // Itens ativos (de obras ativas) com semáforo, etapa e prazo calculados
+  const itensInfo = useMemo(() => {
+    return moveis
+      .filter(m => m.obras?.status === 'ativa')
+      .map(m => {
+        const cor = calcularSemaforo(m, pendenciasPorMovel[m.id] || [])
+        const etapa = calcularEtapaItem(m, pecasPorMovel[m.id] || [])
+        const entregue = m.status_pos_expedicao === 'entregue'
+        const dias = entregue ? null : diasAte(m.previsao_entrega)
+        return { m, cor, etapa, entregue, dias }
+      })
+  }, [moveis, pendenciasPorMovel, pecasPorMovel])
+
+  const semaforo = useMemo(() => {
+    const c = { verde: 0, amarelo: 0, vermelho: 0 }
+    itensInfo.forEach(i => { c[i.cor]++ })
+    return c
+  }, [itensInfo])
+
+  const atrasados = useMemo(
+    () => itensInfo.filter(i => i.dias !== null && i.dias < 0),
+    [itensInfo]
+  )
+  const bloqueados = useMemo(
+    () => itensInfo.filter(i => i.m.motivo_bloqueio && i.m.motivo_bloqueio.trim()),
+    [itensInfo]
+  )
+
+  // Lista "pedem atenção": vermelhos e amarelos, vermelho primeiro, depois por prazo
+  const atencao = useMemo(() => {
+    const ordemCor = { vermelho: 0, amarelo: 1, verde: 2 }
+    return itensInfo
+      .filter(i => i.cor !== 'verde')
+      .sort((a, b) => {
+        if (ordemCor[a.cor] !== ordemCor[b.cor]) return ordemCor[a.cor] - ordemCor[b.cor]
+        const da = a.dias ?? Infinity
+        const db = b.dias ?? Infinity
+        return da - db
+      })
+  }, [itensInfo])
+
+  // Entregas dos próximos 7 dias (não entregues)
+  const entregasSemana = useMemo(() => {
+    return itensInfo
+      .filter(i => i.dias !== null && i.dias >= 0 && i.dias <= 7)
+      .sort((a, b) => a.dias - b.dias)
+  }, [itensInfo])
+
+  const totalItens = itensInfo.length
   const totalPecas = Object.values(etapaCounts).reduce((a, b) => a + b, 0)
+
+  function irParaItens(cor) {
+    navigate(cor ? `/itens?semaforo=${cor}` : '/itens')
+  }
 
   return (
     <div>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-        <p className="text-sm text-gray-500">Visão geral do romaneio</p>
+        <p className="text-sm text-gray-500">Visão geral das obras ativas</p>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={Building2} label="Obras ativas" value={stats.obras} color="#059669" />
-        <StatCard icon={Package} label="Total de peças" value={stats.pecas} color="#3b82f6" />
-        <StatCard icon={ScanLine} label="Romaneios" value={stats.romaneios} color="#8b5cf6" />
-        <StatCard icon={TrendingUp} label="Expedidas" value={etapaCounts.expedicao || 0} color="#ef4444" />
+      {/* KPIs de gestão (item-level) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <StatCard icon={Building2} label="Obras ativas" value={stats.obras} color="#059669" onClick={() => navigate('/obras')} />
+        <StatCard icon={AlertTriangle} label="Itens atrasados" value={atrasados.length} color="#ef4444" onClick={() => irParaItens('vermelho')} />
+        <StatCard icon={CalendarClock} label="Entregas em ≤ 7 dias" value={entregasSemana.length} color="#f59e0b" onClick={() => irParaItens()} />
+        <StatCard icon={Ban} label="Itens bloqueados" value={bloqueados.length} color="#dc2626" onClick={() => irParaItens('vermelho')} />
+      </div>
+
+      {/* Semáforo geral dos itens */}
+      <Card className="mb-8">
+        <CardBody>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Semáforo dos Itens</h3>
+            <span className="text-sm text-gray-500">{totalItens} item(ns) ativos</span>
+          </div>
+          {totalItens === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-4">Nenhum item em obras ativas.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <SemaforoBtn cor={SEMAFORO.verde.cor} label="No prazo" count={semaforo.verde} onClick={() => irParaItens('verde')} />
+                <SemaforoBtn cor={SEMAFORO.amarelo.cor} label="Atenção" count={semaforo.amarelo} onClick={() => irParaItens('amarelo')} />
+                <SemaforoBtn cor={SEMAFORO.vermelho.cor} label="Crítico" count={semaforo.vermelho} onClick={() => irParaItens('vermelho')} />
+              </div>
+              <div className="flex h-3 rounded-full overflow-hidden bg-gray-100">
+                {['verde', 'amarelo', 'vermelho'].map(c => {
+                  const pct = totalItens > 0 ? (semaforo[c] / totalItens) * 100 : 0
+                  return pct > 0 ? (
+                    <div key={c} style={{ width: `${pct}%`, backgroundColor: SEMAFORO[c].cor }} />
+                  ) : null
+                })}
+              </div>
+            </>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Itens que pedem atenção + Entregas da semana */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <Card>
+          <CardBody>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Itens que Pedem Atenção</h3>
+            {atencao.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">Tudo no verde. 🎉</p>
+            ) : (
+              <div className="space-y-2">
+                {atencao.slice(0, 8).map(({ m, cor, etapa, dias }) => (
+                  <ItemRow
+                    key={m.id}
+                    m={m}
+                    cor={cor}
+                    etapa={etapa}
+                    dias={dias}
+                    onClick={() => navigate(`/obras/${m.obras?.id}?item=${m.id}`)}
+                  />
+                ))}
+                {atencao.length > 8 && (
+                  <button onClick={() => irParaItens()} className="text-sm text-primary-600 hover:underline cursor-pointer pt-1">
+                    Ver todos os {atencao.length} itens →
+                  </button>
+                )}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardBody>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Entregas dos Próximos 7 Dias</h3>
+            {entregasSemana.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">Nenhuma entrega prevista para a semana.</p>
+            ) : (
+              <div className="space-y-2">
+                {entregasSemana.slice(0, 8).map(({ m, cor, etapa, dias }) => (
+                  <ItemRow
+                    key={m.id}
+                    m={m}
+                    cor={cor}
+                    etapa={etapa}
+                    dias={dias}
+                    onClick={() => navigate(`/obras/${m.obras?.id}?item=${m.id}`)}
+                  />
+                ))}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* KPIs de chão de fábrica (peças) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <StatCard icon={Package} label="Total de peças" value={stats.pecas} color="#3b82f6" onClick={() => navigate('/pecas')} />
+        <StatCard icon={ScanLine} label="Romaneios" value={stats.romaneios} color="#8b5cf6" onClick={() => navigate('/romaneios')} />
+        <StatCard icon={Package} label="Peças expedidas" value={etapaCounts.expedicao || 0} color="#ef4444" />
       </div>
 
       {/* Peças por etapa */}
@@ -129,6 +296,46 @@ export default function Dashboard() {
           )}
         </CardBody>
       </Card>
+    </div>
+  )
+}
+
+function SemaforoBtn({ cor, label, count, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all cursor-pointer"
+    >
+      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cor }} />
+      <span className="text-sm text-gray-700">{label}</span>
+      <span className="text-lg font-bold ml-auto" style={{ color: cor }}>{count}</span>
+    </button>
+  )
+}
+
+function ItemRow({ m, cor, etapa, dias, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-md px-1"
+    >
+      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: SEMAFORO[cor].cor }} />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-gray-900 truncate">
+          {m.codigo} — {m.descricao || m.nome}
+        </div>
+        <div className="text-xs text-gray-500 truncate">
+          {m.obras?.codigo} · {m.obras?.cliente}{m.responsavel ? ` · ${m.responsavel}` : ''}
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <StatusBadge label={etapa.label} cor={etapa.cor} />
+        {dias !== null && (
+          <div className={`text-xs mt-0.5 ${dias < 0 ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+            {dias < 0 ? `${Math.abs(dias)}d atrasado` : dias === 0 ? 'hoje' : `em ${dias}d`}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

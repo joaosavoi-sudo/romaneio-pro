@@ -25,13 +25,20 @@ body {
   body * {
     visibility: hidden;
   }
-  .print-area, .print-area * {
+  /* Revela tanto etiquetas (.print-area) quanto documentos A4 (.print-doc:
+     One Page Report, Relatório e Romaneio), escapando do Layout/menu lateral. */
+  .print-area, .print-area *,
+  .print-doc, .print-doc * {
     visibility: visible;
   }
-  .print-area {
+  .print-area,
+  .print-doc {
     position: absolute;
     left: 0;
     top: 0;
+  }
+  .print-doc {
+    width: 100%;
   }
   .etiqueta {
     width: 150mm;

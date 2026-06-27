@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Printer, Save, ClipboardList, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
+import { ArrowLeft, Printer, Save, ClipboardList, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Btn, Card, CardBody } from '../components/ui'
 import { ETAPAS } from '../lib/constants'
-import { FASE_MAP, TIPO_PENDENCIA_MAP, isAtrasado } from '../lib/templates'
+import { TIPO_PENDENCIA_MAP } from '../lib/templates'
+import { temCronograma } from '../lib/cronograma'
+import CronogramaBar from '../components/CronogramaBar'
 
 export default function RelatorioObra() {
   const { id } = useParams()
   const navigate = useNavigate()
 
   const [obra, setObra] = useState(null)
-  const [marcos, setMarcos] = useState([])
   const [pendencias, setPendencias] = useState([])
   const [pecas, setPecas] = useState([])
   const [moveis, setMoveis] = useState([])
@@ -23,15 +24,13 @@ export default function RelatorioObra() {
   useEffect(() => { loadData() }, [id])
 
   async function loadData() {
-    const [obraRes, marcosRes, pendRes, romsRes, movRes] = await Promise.all([
+    const [obraRes, pendRes, romsRes, movRes] = await Promise.all([
       supabase.from('obras').select('*').eq('id', id).single(),
-      supabase.from('obra_marcos').select('*').eq('obra_id', id).order('ordem'),
       supabase.from('pendencias').select('*').eq('obra_id', id).eq('status', 'aberta').order('prazo', { ascending: true, nullsLast: true }),
       supabase.from('romaneios').select('id, pecas(id, etapa)').eq('obra_id', id),
       supabase.from('moveis').select('id').eq('obra_id', id),
     ])
     setObra(obraRes.data)
-    setMarcos(marcosRes.data || [])
     setPendencias(pendRes.data || [])
     const allPecas = (romsRes.data || []).flatMap(r => r.pecas || [])
     setPecas(allPecas)
@@ -128,45 +127,9 @@ export default function RelatorioObra() {
         </div>
 
         {/* Cronograma */}
-        {marcos.length > 0 && (
-          <Secao titulo="Cronograma">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', fontSize: '8pt' }}>
-              {['pre_producao', 'producao', 'pos_producao'].map(faseId => {
-                const fase = FASE_MAP[faseId]
-                const lista = marcos.filter(m => m.fase === faseId)
-                if (lista.length === 0) return <div key={faseId} />
-                return (
-                  <div key={faseId} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{ padding: '4px 8px', fontWeight: 600, fontSize: '8.5pt', backgroundColor: fase.cor + '20', color: fase.cor }}>
-                      {fase.label}
-                    </div>
-                    <div style={{ padding: '4px 8px' }}>
-                      {lista.map(m => {
-                        const atr = isAtrasado(m)
-                        const concluido = m.status === 'concluido'
-                        const cor = concluido ? '#10b981' : atr ? '#ef4444' : '#9ca3af'
-                        const icone = concluido ? '✓' : atr ? '⚠' : '○'
-                        return (
-                          <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', padding: '2px 0' }}>
-                            <span style={{ color: cor, fontWeight: 700, lineHeight: 1.2 }}>{icone}</span>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '8pt', textDecoration: concluido ? 'line-through' : 'none', color: concluido ? '#9ca3af' : '#374151' }}>
-                                {m.marco}
-                              </div>
-                              {m.data_alvo && (
-                                <div style={{ fontSize: '7pt', color: '#9ca3af' }}>
-                                  {new Date(m.data_alvo).toLocaleDateString('pt-BR')}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+        {temCronograma(obra) && (
+          <Secao titulo={`Cronograma (${obra.prazo_dias} dias)`}>
+            <CronogramaBar obra={obra} />
           </Secao>
         )}
 
