@@ -155,6 +155,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 16384,
+        thinking: { type: 'disabled' },
+        output_config: { effort: 'low' },
         messages: [{ role: 'user', content: userContent }],
       }),
     }).finally(() => clearTimeout(timer))
