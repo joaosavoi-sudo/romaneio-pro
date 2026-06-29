@@ -1,18 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Wrench, Search } from 'lucide-react'
+import { Wrench, Search, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
-  STATUS_ASSISTENCIA, STATUS_ASSISTENCIA_MAP, assistenciaAtrasada, assistenciaEmAberto,
+  STATUS_ASSISTENCIA_MAP, assistenciaAtrasada, assistenciaEmAberto,
 } from '../lib/assistencias'
 import { fmtData } from '../lib/cronograma'
-import { Card, CardBody, Select, Badge } from '../components/ui'
+import { Btn, Card, CardBody, Select, Badge } from '../components/ui'
 import ResponsavelInput from '../components/ResponsavelInput'
+import AssistenciaFormModal from '../components/AssistenciaFormModal'
 
 export default function Assistencias() {
-  const navigate = useNavigate()
   const [lista, setLista] = useState([])
+  const [obrasAll, setObrasAll] = useState([])
   const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState(null)
 
   const [foco, setFoco] = useState('') // '' | abertas | atrasadas | cobrar
   const [filtroObra, setFiltroObra] = useState('')
@@ -23,15 +25,18 @@ export default function Assistencias() {
 
   async function loadData() {
     try {
-      const { data } = await supabase
-        .from('assistencias')
-        .select('*, obras(id, codigo, cliente), moveis(codigo)')
-        .order('created_at', { ascending: false })
-      setLista(data || [])
+      const [{ data: assist }, { data: obs }] = await Promise.all([
+        supabase.from('assistencias').select('*, obras(id, codigo, cliente), moveis(codigo)').order('created_at', { ascending: false }),
+        supabase.from('obras').select('id, codigo, cliente').order('codigo', { ascending: true }),
+      ])
+      setLista(assist || [])
+      setObrasAll(obs || [])
     } finally {
       setLoading(false)
     }
   }
+
+  function openEdit(a) { setEditing(a); setModalOpen(true) }
 
   const obras = useMemo(() => {
     const map = new Map()
@@ -66,11 +71,14 @@ export default function Assistencias() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Wrench size={26} className="text-primary-600" /> Assistência Técnica
-        </h2>
-        <p className="text-sm text-gray-500">Chamados de pós-venda de todas as obras.</p>
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Wrench size={26} className="text-primary-600" /> Assistência Técnica
+          </h2>
+          <p className="text-sm text-gray-500">Chamados de pós-venda — inclusive de obras antigas não cadastradas.</p>
+        </div>
+        <Btn onClick={() => { setEditing(null); setModalOpen(true) }}><Plus size={16} /> Nova solicitação</Btn>
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-3">
@@ -121,9 +129,14 @@ export default function Assistencias() {
                   const atrasada = assistenciaAtrasada(a)
                   return (
                     <tr key={a.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
-                      onClick={() => navigate(`/obras/${a.obras?.id}?tab=assistencia`)}>
-                      <td className="px-3 py-2.5 font-mono font-medium text-gray-900 whitespace-nowrap">{a.obras?.codigo || '—'}</td>
-                      <td className="px-3 py-2.5 text-gray-700 max-w-[150px] truncate" title={a.obras?.cliente}>{a.obras?.cliente || '—'}</td>
+                      onClick={() => openEdit(a)}>
+                      <td className="px-3 py-2.5 font-mono font-medium text-gray-900 whitespace-nowrap">
+                        {a.obras?.codigo || <Badge color="#6b7280">externa</Badge>}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-700 max-w-[150px] truncate" title={a.obras?.cliente || a.cliente_externo}>
+                        {a.obras?.cliente || a.cliente_externo || '—'}
+                        {!a.obras && a.obra_externa && <span className="text-xs text-gray-400"> · {a.obra_externa}</span>}
+                      </td>
                       <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">{a.moveis?.codigo || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-700 max-w-[220px] truncate" title={a.titulo}>{a.titulo}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">{st && <Badge color={st.cor}>{st.label}</Badge>}</td>
@@ -146,6 +159,14 @@ export default function Assistencias() {
           </div>
         </Card>
       )}
+
+      <AssistenciaFormModal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setEditing(null) }}
+        onSaved={loadData}
+        editing={editing}
+        obras={obrasAll}
+      />
     </div>
   )
 }
