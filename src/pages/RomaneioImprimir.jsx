@@ -23,7 +23,9 @@ export default function RomaneioImprimir() {
     }
     const [pecasRes, moveisRes] = await Promise.all([
       supabase.from('pecas').select('*').eq('romaneio_id', id).order('created_at', { ascending: true }),
-      supabase.from('moveis').select('*').eq('romaneio_id', id).order('codigo', { ascending: true }),
+      rom?.obras?.id
+        ? supabase.from('moveis').select('*').eq('obra_id', rom.obras.id).order('codigo', { ascending: true })
+        : Promise.resolve({ data: [] }),
     ])
     setPecas(pecasRes.data || [])
     setMoveis(moveisRes.data || [])
@@ -33,8 +35,13 @@ export default function RomaneioImprimir() {
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
   if (!romaneio) return <p className="text-center text-red-500 py-12">Romaneio não encontrado</p>
 
-  const moveisComPecas = moveis.map(m => ({ ...m, pecas: pecas.filter(p => p.movel_id === m.id) }))
-  const pecasSemMovel = pecas.filter(p => !p.movel_id)
+  // Agrupa só os itens que têm peças neste romaneio.
+  const moveisComPecas = moveis
+    .map(m => ({ ...m, pecas: pecas.filter(p => p.movel_id === m.id) }))
+    .filter(m => m.pecas.length > 0)
+  // "Avulsas" = qualquer peça não agrupada (movel_id nulo OU órfão) — nunca derruba peça.
+  const agrupadas = new Set(moveisComPecas.flatMap(m => m.pecas.map(p => p.id)))
+  const pecasSemMovel = pecas.filter(p => !agrupadas.has(p.id))
 
   return (
     <div>
@@ -97,7 +104,7 @@ export default function RomaneioImprimir() {
 
         {/* Resumo */}
         <div style={{ marginBottom: '20px', padding: '8px 12px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', fontSize: '10pt' }}>
-          <strong>Total: {pecas.length} peça(s)</strong> distribuída(s) em {moveis.length} item(ns)
+          <strong>Total: {pecas.length} peça(s)</strong> distribuída(s) em {moveisComPecas.length} item(ns)
           {pecasSemMovel.length > 0 && ` + ${pecasSemMovel.length} peça(s) avulsa(s)`}
         </div>
 

@@ -43,20 +43,26 @@ export default function Etiquetas() {
 
   useEffect(() => {
     if (romaneioId) {
-      Promise.all([
-        supabase.from('pecas').select('*').eq('romaneio_id', romaneioId).order('codigo'),
-        supabase.from('moveis').select('*').eq('romaneio_id', romaneioId),
-      ]).then(([pecasRes, moveisRes]) => {
-        setPecas(pecasRes.data || [])
-        setMoveis(moveisRes.data || [])
-        setSelected(new Set((pecasRes.data || []).map(p => p.id)))
-      })
+      supabase.from('pecas').select('*').eq('romaneio_id', romaneioId).order('codigo')
+        .then(({ data }) => {
+          setPecas(data || [])
+          setSelected(new Set((data || []).map(p => p.id)))
+        })
     } else {
       setPecas([])
-      setMoveis([])
       setSelected(new Set())
     }
   }, [romaneioId])
+
+  // Itens pertencem à obra (obra_id), não ao romaneio — carrega pela obra.
+  useEffect(() => {
+    if (obraId) {
+      supabase.from('moveis').select('*').eq('obra_id', obraId)
+        .then(({ data }) => setMoveis(data || []))
+    } else {
+      setMoveis([])
+    }
+  }, [obraId])
 
   function toggleAll() {
     if (selected.size === pecas.length) {
