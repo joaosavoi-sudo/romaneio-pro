@@ -8,10 +8,11 @@ export const ETAPAS = [
 ]
 
 export const ESTACOES = [
+  { slug: 'romaneio', label: 'Romaneio', etapa: 'romaneio', cor: '#3b82f6' },
   { slug: 'acabamento', label: 'Acabamento', etapa: 'acabamento', cor: '#f59e0b' },
   { slug: 'conferencia', label: 'Conferência', etapa: 'conferencia', cor: '#8b5cf6' },
-  { slug: 'embalagem', label: 'Embalagem', etapa: 'embalagem', cor: '#10b981' },
-  { slug: 'expedicao', label: 'Expedição / Carga', etapa: 'expedicao', cor: '#ef4444' },
+  { slug: 'embalagem', label: 'Embalado/Expedição', etapa: 'embalagem', cor: '#10b981' },
+  { slug: 'expedicao', label: 'Carregado/Entrega', etapa: 'expedicao', cor: '#ef4444' },
 ]
 
 export const ESTACAO_MAP = Object.fromEntries(ESTACOES.map(e => [e.slug, e]))
