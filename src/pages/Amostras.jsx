@@ -118,6 +118,7 @@ export default function Amostras() {
                   <th className="px-3 py-2.5 font-medium">Itens</th>
                   <th className="px-3 py-2.5 font-medium">Status</th>
                   <th className="px-3 py-2.5 font-medium">Responsável</th>
+                  <th className="px-3 py-2.5 font-medium">Solicitante</th>
                   <th className="px-3 py-2.5 font-medium">Prazo</th>
                 </tr>
               </thead>
@@ -136,6 +137,7 @@ export default function Amostras() {
                       <td className="px-3 py-2.5 text-gray-500 font-mono text-xs max-w-[120px] truncate" title={itens}>{itens || '—'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">{st && <Badge color={st.cor}>{st.label}</Badge>}</td>
                       <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{a.responsavel || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{a.solicitante || '—'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className={atrasada ? 'text-red-600 font-medium' : 'text-gray-500'}>
                           {a.prazo ? fmtData(a.prazo) : '—'}{atrasada ? ' ⚠' : ''}

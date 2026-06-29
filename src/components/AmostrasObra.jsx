@@ -11,7 +11,7 @@ import { Btn, Input, Select, Modal, Card, CardBody, Badge } from './ui'
 import ResponsavelInput from './ResponsavelInput'
 
 const EMPTY = {
-  tipo: 'cor_laca', titulo: '', formula: '', responsavel: '', prazo: '',
+  tipo: 'cor_laca', titulo: '', formula: '', solicitante: '', responsavel: '', prazo: '',
   localizacao_fisica: '', observacoes: '', status: 'solicitada', itemIds: [], fotos: [],
 }
 
@@ -43,7 +43,7 @@ export default function AmostrasObra({ obra, moveis = [], onChange }) {
 
   function openNew() {
     setEditing(null)
-    setForm({ ...EMPTY, prazo: prazoPadrao('cor_laca') })
+    setForm({ ...EMPTY, prazo: prazoPadrao('cor_laca'), solicitante: userEmail || '' })
     setModalOpen(true)
   }
 
@@ -51,7 +51,7 @@ export default function AmostrasObra({ obra, moveis = [], onChange }) {
     setEditing(a)
     setForm({
       tipo: a.tipo || 'outro', titulo: a.titulo || '', formula: a.formula || '',
-      responsavel: a.responsavel || '', prazo: a.prazo || '',
+      solicitante: a.solicitante || '', responsavel: a.responsavel || '', prazo: a.prazo || '',
       localizacao_fisica: a.localizacao_fisica || '', observacoes: a.observacoes || '',
       status: a.status || 'solicitada',
       itemIds: (a.amostra_itens || []).map(x => x.movel_id),
@@ -102,7 +102,8 @@ export default function AmostrasObra({ obra, moveis = [], onChange }) {
     try {
       const payload = {
         obra_id: obra.id, tipo: form.tipo, titulo: form.titulo.trim(),
-        formula: form.formula || null, responsavel: form.responsavel || null,
+        formula: form.formula || null, solicitante: form.solicitante || null,
+        responsavel: form.responsavel || null,
         prazo: form.prazo || null, localizacao_fisica: form.localizacao_fisica || null,
         observacoes: form.observacoes || null, status: form.status,
         fotos: form.fotos, updated_at: new Date().toISOString(),
@@ -208,7 +209,8 @@ export default function AmostrasObra({ obra, moveis = [], onChange }) {
                       <span className={`text-xs ${atrasada ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                         {a.prazo ? `prazo ${fmtData(a.prazo)}${atrasada ? ' (vencido)' : ''}` : 'sem prazo'}
                       </span>
-                      {a.responsavel && <span className="text-xs text-gray-400">· {a.responsavel}</span>}
+                      {a.responsavel && <span className="text-xs text-gray-400" title="Responsável (executa)">· resp: {a.responsavel}</span>}
+                      {a.solicitante && <span className="text-xs text-gray-400" title="Solicitante (acompanha)">· sol: {a.solicitante}</span>}
                     </div>
                   </CardBody>
                 </div>
@@ -253,9 +255,10 @@ export default function AmostrasObra({ obra, moveis = [], onChange }) {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <ResponsavelInput value={form.responsavel} onChange={e => setForm({ ...form, responsavel: e.target.value })} placeholder="Quem faz a amostra" />
-            <Input label="Localização física" value={form.localizacao_fisica} onChange={e => setForm({ ...form, localizacao_fisica: e.target.value })} placeholder="Onde a amostra fica guardada" />
+            <ResponsavelInput label="Solicitante" value={form.solicitante} onChange={e => setForm({ ...form, solicitante: e.target.value })} placeholder="Quem pediu / acompanha" />
+            <ResponsavelInput label="Responsável (executa · SLA)" value={form.responsavel} onChange={e => setForm({ ...form, responsavel: e.target.value })} placeholder="Quem faz a amostra" />
           </div>
+          <Input label="Localização física" value={form.localizacao_fisica} onChange={e => setForm({ ...form, localizacao_fisica: e.target.value })} placeholder="Onde a amostra fica guardada" />
 
           {editing && (
             <Select label="Status" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
