@@ -118,31 +118,34 @@ export default function ObraDetalhe() {
   }, [moveis, searchParams])
 
   async function loadData() {
-    const [obraRes, romRes, movRes, pendRes, ajustesRes] = await Promise.all([
-      supabase.from('obras').select('*').eq('id', id).single(),
-      supabase.from('romaneios').select('*, pecas(id, etapa, movel_id, created_at)').eq('obra_id', id).order('created_at', { ascending: false }),
-      supabase.from('moveis').select('*').eq('obra_id', id).order('codigo', { ascending: true }),
-      supabase.from('pendencias').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
-      supabase.from('obra_prazo_ajustes').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
-    ])
-    setObra(obraRes.data)
-    setRomaneios(romRes.data || [])
-    setMoveis(movRes.data || [])
-    setPendencias(pendRes.data || [])
-    setPrazoAjustes(ajustesRes.data || [])
+    try {
+      const [obraRes, romRes, movRes, pendRes, ajustesRes] = await Promise.all([
+        supabase.from('obras').select('*').eq('id', id).single(),
+        supabase.from('romaneios').select('*, pecas(id, etapa, movel_id, created_at)').eq('obra_id', id).order('created_at', { ascending: false }),
+        supabase.from('moveis').select('*').eq('obra_id', id).order('codigo', { ascending: true }),
+        supabase.from('pendencias').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
+        supabase.from('obra_prazo_ajustes').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
+      ])
+      setObra(obraRes.data)
+      setRomaneios(romRes.data || [])
+      setMoveis(movRes.data || [])
+      setPendencias(pendRes.data || [])
+      setPrazoAjustes(ajustesRes.data || [])
 
-    // Histórico das peças da obra → base do "realizado" no cronograma
-    const pecaIds = (romRes.data || []).flatMap(r => (r.pecas || []).map(p => p.id))
-    if (pecaIds.length > 0) {
-      const { data: hist } = await supabase
-        .from('peca_historico')
-        .select('peca_id, etapa_nova, created_at')
-        .in('peca_id', pecaIds)
-      setPecaHistorico(hist || [])
-    } else {
-      setPecaHistorico([])
+      // Histórico das peças da obra → base do "realizado" no cronograma
+      const pecaIds = (romRes.data || []).flatMap(r => (r.pecas || []).map(p => p.id))
+      if (pecaIds.length > 0) {
+        const { data: hist } = await supabase
+          .from('peca_historico')
+          .select('peca_id, etapa_nova, created_at')
+          .in('peca_id', pecaIds)
+        setPecaHistorico(hist || [])
+      } else {
+        setPecaHistorico([])
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   // Helpers de derivação por item

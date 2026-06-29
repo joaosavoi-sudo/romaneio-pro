@@ -22,14 +22,17 @@ export default function ComunicacaoObra({ obra, pctConcluido, pendencias = [] })
   useEffect(() => { loadContatos(); supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email || '')) }, [obra.id])
 
   async function loadContatos() {
-    const { data } = await supabase
-      .from('obra_contatos')
-      .select('*')
-      .eq('obra_id', obra.id)
-      .order('data', { ascending: false })
-      .order('created_at', { ascending: false })
-    setContatos(data || [])
-    setLoading(false)
+    try {
+      const { data } = await supabase
+        .from('obra_contatos')
+        .select('*')
+        .eq('obra_id', obra.id)
+        .order('data', { ascending: false })
+        .order('created_at', { ascending: false })
+      setContatos(data || [])
+    } finally {
+      setLoading(false)
+    }
   }
 
   const ultimo = contatos[0]

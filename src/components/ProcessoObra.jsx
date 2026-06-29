@@ -7,6 +7,13 @@ import {
 } from '../lib/processo'
 import { Btn, Card, CardBody, Badge } from './ui'
 
+// Formata data BR com segurança (evita "Invalid Date" se o valor estiver corrompido).
+function fmtDataBR(v) {
+  if (!v) return ''
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR')
+}
+
 // Aba "Processo" da obra: ciclo de 8 etapas com checklist e gate de transição.
 // Props: obra, onChange (recarrega a obra após gravar).
 export default function ProcessoObra({ obra, onChange }) {
@@ -25,16 +32,19 @@ export default function ProcessoObra({ obra, onChange }) {
 
   async function toggleItem(key, marcadoAgora) {
     setSalvando(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const checklist = { ...(obra.checklist || {}) }
-    const etapaObj = { ...(checklist[etapaVista] || {}) }
-    etapaObj[key] = marcadoAgora
-      ? { ok: false }
-      : { ok: true, por: user?.email || null, em: new Date().toISOString() }
-    checklist[etapaVista] = etapaObj
-    await supabase.from('obras').update({ checklist }).eq('id', obra.id)
-    setSalvando(false)
-    onChange?.()
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const checklist = { ...(obra.checklist || {}) }
+      const etapaObj = { ...(checklist[etapaVista] || {}) }
+      etapaObj[key] = marcadoAgora
+        ? { ok: false }
+        : { ok: true, por: user?.email || null, em: new Date().toISOString() }
+      checklist[etapaVista] = etapaObj
+      await supabase.from('obras').update({ checklist }).eq('id', obra.id)
+      onChange?.()
+    } finally {
+      setSalvando(false)
+    }
   }
 
   async function avancar() {
@@ -131,7 +141,7 @@ export default function ProcessoObra({ obra, onChange }) {
                       <Badge color="#6b7280">{item.papel}</Badge>
                       {marcado && meta?.em && (
                         <span className="text-[10px] text-gray-400">
-                          ✓ {meta.por ? `${meta.por} · ` : ''}{new Date(meta.em).toLocaleDateString('pt-BR')}
+                          ✓ {meta.por ? `${meta.por} · ` : ''}{fmtDataBR(meta.em)}
                         </span>
                       )}
                     </div>

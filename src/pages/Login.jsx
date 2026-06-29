@@ -9,7 +9,6 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [isSignUp, setIsSignUp] = useState(false)
   const navigate = useNavigate()
 
   async function handleSubmit(e) {
@@ -17,22 +16,13 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    const { error: err } = isSignUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password })
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
 
     if (err) {
       setError(err.message)
       setLoading(false)
     } else {
-      if (isSignUp) {
-        setError('')
-        alert('Conta criada! Verifique seu email para confirmar.')
-        setIsSignUp(false)
-      } else {
-        navigate('/')
-      }
-      setLoading(false)
+      navigate('/')
     }
   }
 
@@ -48,9 +38,7 @@ export default function Login() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            {isSignUp ? 'Criar conta' : 'Entrar'}
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Entrar</h2>
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -79,19 +67,13 @@ export default function Login() {
               minLength={6}
             />
             <Btn type="submit" disabled={loading} className="w-full">
-              {loading ? 'Carregando...' : isSignUp ? 'Criar conta' : 'Entrar'}
+              {loading ? 'Carregando...' : 'Entrar'}
             </Btn>
           </form>
 
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => { setIsSignUp(!isSignUp); setError('') }}
-              className="text-sm text-primary-600 hover:text-primary-700 cursor-pointer"
-            >
-              {isSignUp ? 'Já tem conta? Entrar' : 'Não tem conta? Criar'}
-            </button>
-          </div>
+          <p className="mt-4 text-center text-xs text-gray-400">
+            Acesso restrito à equipe. Solicite seu login à gestão.
+          </p>
         </div>
       </div>
     </div>
