@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, Package, ScanLine, AlertTriangle, CalendarClock, Ban } from 'lucide-react'
+import { Building2, Package, ScanLine, AlertTriangle, CalendarClock, Ban, MessageCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, SEMAFORO } from '../lib/constants'
 import { OBRA_ETAPAS, etapaAtual } from '../lib/processo'
+import { INTERVALO_CONTATO_DIAS, diasDesde } from '../lib/comunicacao'
 import { calcularEtapaItem, calcularSemaforo, diasAte } from '../lib/itemStatus'
 import { Card, CardBody } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
@@ -36,6 +37,7 @@ export default function Dashboard() {
   const [pecasPorMovel, setPecasPorMovel] = useState({})
   const [pendenciasPorMovel, setPendenciasPorMovel] = useState({})
   const [obrasPorEtapa, setObrasPorEtapa] = useState({})
+  const [obrasAComunicar, setObrasAComunicar] = useState(0)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -43,13 +45,14 @@ export default function Dashboard() {
   }, [])
 
   async function loadStats() {
-    const [obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes] = await Promise.all([
-      supabase.from('obras').select('id, etapa_atual').eq('status', 'ativa'),
+    const [obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes, contatosRes] = await Promise.all([
+      supabase.from('obras').select('id, etapa_atual, created_at').eq('status', 'ativa'),
       supabase.from('pecas').select('id, etapa, movel_id'),
       supabase.from('romaneios').select('id', { count: 'exact', head: true }),
       supabase.from('peca_historico').select('*, pecas(codigo, nome)').order('created_at', { ascending: false }).limit(10),
       supabase.from('moveis').select('*, obras(id, codigo, cliente, status)').order('codigo', { ascending: true }),
       supabase.from('pendencias').select('id, status, prazo, movel_id').not('movel_id', 'is', null),
+      supabase.from('obra_contatos').select('obra_id, data'),
     ])
 
     setStats({
@@ -65,6 +68,18 @@ export default function Dashboard() {
       if (etCounts[k] != null) etCounts[k]++
     })
     setObrasPorEtapa(etCounts)
+
+    // Obras ativas sem contato com o cliente nos últimos N dias (base do KPI de aderência)
+    const ultimoContato = {}
+    ;(contatosRes.data || []).forEach(c => {
+      if (!ultimoContato[c.obra_id] || c.data > ultimoContato[c.obra_id]) ultimoContato[c.obra_id] = c.data
+    })
+    const aComunicar = (obrasRes.data || []).filter(o => {
+      const base = ultimoContato[o.id] || o.created_at
+      const d = diasDesde(base)
+      return d != null && d >= INTERVALO_CONTATO_DIAS
+    }).length
+    setObrasAComunicar(aComunicar)
 
     const counts = {}
     ETAPAS.forEach(e => { counts[e.id] = 0 })
@@ -151,6 +166,19 @@ export default function Dashboard() {
         <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
         <p className="text-sm text-gray-500">Visão geral das obras ativas</p>
       </div>
+
+      {/* Alerta: obras a comunicar com o cliente */}
+      {obrasAComunicar > 0 && (
+        <button
+          onClick={() => navigate('/obras')}
+          className="w-full mb-4 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left cursor-pointer hover:bg-amber-100/60"
+        >
+          <MessageCircle size={20} className="text-amber-600 shrink-0" />
+          <span className="text-sm text-amber-800">
+            <strong>{obrasAComunicar}</strong> obra(s) ativa(s) sem contato com o cliente há {INTERVALO_CONTATO_DIAS}+ dias — atualize-os antes que perguntem.
+          </span>
+        </button>
+      )}
 
       {/* KPIs de gestão (item-level) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">

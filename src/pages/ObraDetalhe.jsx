@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, ClipboardList, Trash2, Box, Pencil,
   AlertCircle, Calendar, Paperclip, FileBarChart, LayoutGrid,
-  ListChecks, Search, CheckCircle2, RotateCcw, GitBranch,
+  ListChecks, Search, CheckCircle2, RotateCcw, GitBranch, MessageCircle,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, OBRA_STATUS } from '../lib/constants'
@@ -20,6 +20,7 @@ import CronogramaBar from '../components/CronogramaBar'
 import CronogramaEditorModal from '../components/CronogramaEditorModal'
 import ResponsavelInput from '../components/ResponsavelInput'
 import ProcessoObra from '../components/ProcessoObra'
+import ComunicacaoObra from '../components/ComunicacaoObra'
 import { OBRA_ETAPA_MAP, etapaAtual } from '../lib/processo'
 
 const EMPTY_MOVEL = {
@@ -399,6 +400,7 @@ export default function ObraDetalhe() {
         <TabBtn current={tab} value="overview" onClick={setTab} icon={LayoutGrid} label="Visão Geral" />
         <TabBtn current={tab} value="processo" onClick={setTab} icon={GitBranch} label="Processo" />
         <TabBtn current={tab} value="pendencias" onClick={setTab} icon={AlertCircle} label={`Pendências${pendAbertas.length > 0 ? ` (${pendAbertas.length})` : ''}`} />
+        <TabBtn current={tab} value="comunicacao" onClick={setTab} icon={MessageCircle} label="Comunicação" />
         <TabBtn current={tab} value="cronograma" onClick={setTab} icon={Calendar} label="Cronograma" />
         <TabBtn current={tab} value="moveis" onClick={setTab} icon={Box} label={`Itens (${moveis.length})`} />
         <TabBtn current={tab} value="romaneios" onClick={setTab} icon={ClipboardList} label={`Romaneios (${romaneios.length})`} />
@@ -531,6 +533,11 @@ export default function ObraDetalhe() {
       {/* TAB: Processo */}
       {tab === 'processo' && (
         <ProcessoObra obra={obra} onChange={loadData} />
+      )}
+
+      {/* TAB: Comunicação */}
+      {tab === 'comunicacao' && (
+        <ComunicacaoObra obra={obra} pctConcluido={pctConcluido} pendencias={pendencias} />
       )}
 
       {/* TAB: Cronograma */}
