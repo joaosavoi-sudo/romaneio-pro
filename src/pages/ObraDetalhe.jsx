@@ -36,6 +36,14 @@ const EMPTY_MOVEL = {
 
 const EMPTY_PENDENCIA = { tipo: 'cliente', titulo: '', descricao: '', responsavel: '', prazo: '', movel_id: '' }
 
+// Dias entre duas datas (ISO/Date). Positivo se b > a.
+function diffDias(a, b) {
+  if (!a || !b) return 0
+  const da = new Date(a); da.setHours(0, 0, 0, 0)
+  const db = new Date(b); db.setHours(0, 0, 0, 0)
+  return Math.round((db.getTime() - da.getTime()) / 86400000)
+}
+
 // Monta o valor inicial do editor de cronograma a partir de uma fonte (obra ou item).
 function buildCronoValor(src) {
   const fases = getFases(src)
@@ -56,6 +64,8 @@ export default function ObraDetalhe() {
   const [moveis, setMoveis] = useState([])
   const [pendencias, setPendencias] = useState([])
   const [pecaHistorico, setPecaHistorico] = useState([])
+  const [prazoAjustes, setPrazoAjustes] = useState([])
+  const [userEmail, setUserEmail] = useState('')
   const [loading, setLoading] = useState(true)
 
   const [tab, setTab] = useState('overview')
@@ -69,6 +79,17 @@ export default function ObraDetalhe() {
   const [editingPend, setEditingPend] = useState(null)
   const [pendForm, setPendForm] = useState({ ...EMPTY_PENDENCIA })
 
+  // Resolver pendência com nota
+  const [resolveOpen, setResolveOpen] = useState(false)
+  const [resolvendoPend, setResolvendoPend] = useState(null)
+  const [notaResolucao, setNotaResolucao] = useState('')
+
+  // Justificativa de postergação de prazo
+  const [justifOpen, setJustifOpen] = useState(false)
+  const [cronoPendente, setCronoPendente] = useState(null)
+  const [justifTexto, setJustifTexto] = useState('')
+  const [justifPendenciaId, setJustifPendenciaId] = useState('')
+
   const [cronoModalOpen, setCronoModalOpen] = useState(false)
   const [cronoTarget, setCronoTarget] = useState({ tipo: 'obra' }) // { tipo:'obra' } | { tipo:'item', movel }
   const [cronoValor, setCronoValor] = useState({ data_inicio: '', prazo_dias: '', fases: [] })
@@ -81,6 +102,7 @@ export default function ObraDetalhe() {
   const [buscaItem, setBuscaItem] = useState('')
 
   useEffect(() => { loadData() }, [id])
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email || '')) }, [])
 
   // Auto-abrir modal do item via ?item=<id> (vindo de /itens)
   useEffect(() => {
@@ -96,16 +118,18 @@ export default function ObraDetalhe() {
   }, [moveis, searchParams])
 
   async function loadData() {
-    const [obraRes, romRes, movRes, pendRes] = await Promise.all([
+    const [obraRes, romRes, movRes, pendRes, ajustesRes] = await Promise.all([
       supabase.from('obras').select('*').eq('id', id).single(),
       supabase.from('romaneios').select('*, pecas(id, etapa, movel_id, created_at)').eq('obra_id', id).order('created_at', { ascending: false }),
       supabase.from('moveis').select('*').eq('obra_id', id).order('codigo', { ascending: true }),
       supabase.from('pendencias').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
+      supabase.from('obra_prazo_ajustes').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
     ])
     setObra(obraRes.data)
     setRomaneios(romRes.data || [])
     setMoveis(movRes.data || [])
     setPendencias(pendRes.data || [])
+    setPrazoAjustes(ajustesRes.data || [])
 
     // Histórico das peças da obra → base do "realizado" no cronograma
     const pecaIds = (romRes.data || []).flatMap(r => (r.pecas || []).map(p => p.id))
@@ -242,11 +266,39 @@ export default function ObraDetalhe() {
     loadData()
   }
 
-  async function togglePend(p) {
-    const novo = p.status === 'aberta' ? 'resolvida' : 'aberta'
+  // Marcar resolvida abre o modal de nota; reabrir é direto.
+  function onTogglePend(p) {
+    if (p.status === 'aberta') {
+      setResolvendoPend(p)
+      setNotaResolucao('')
+      setResolveOpen(true)
+    } else {
+      reabrirPend(p)
+    }
+  }
+
+  async function confirmarResolucao(e) {
+    e?.preventDefault?.()
+    if (!resolvendoPend) return
     await supabase.from('pendencias').update({
-      status: novo,
-      resolvida_em: novo === 'resolvida' ? new Date().toISOString() : null,
+      status: 'resolvida',
+      resolvida_em: new Date().toISOString(),
+      resolvida_por: userEmail || null,
+      nota_resolucao: notaResolucao.trim() || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', resolvendoPend.id)
+    setResolveOpen(false)
+    setResolvendoPend(null)
+    setNotaResolucao('')
+    loadData()
+  }
+
+  async function reabrirPend(p) {
+    await supabase.from('pendencias').update({
+      status: 'aberta',
+      resolvida_em: null,
+      resolvida_por: null,
+      nota_resolucao: null,
       updated_at: new Date().toISOString(),
     }).eq('id', p.id)
     loadData()
@@ -285,27 +337,65 @@ export default function ObraDetalhe() {
       // Reflete na hora no modal do item aberto
       setEditingMovel(prev => (prev && prev.id === cronoTarget.movel.id ? { ...prev, ...novo } : prev))
       setMovelForm(prev => ({ ...prev, previsao_entrega: entrega }))
-    } else {
-      await supabase.from('obras').update({
+      setCronoModalOpen(false)
+      loadData()
+      return
+    }
+    // Obra: se o novo prazo POSTERGA a entrega, exige justificativa antes de salvar.
+    const entregaAntiga = obra.data_entrega_prometida
+    const posterga = !!(entregaAntiga && entrega && entrega > entregaAntiga)
+    if (posterga) {
+      setCronoPendente({ payload, entrega, entregaAntiga, diasDelta: diffDias(entregaAntiga, entrega) })
+      setJustifTexto('')
+      setJustifPendenciaId('')
+      setCronoModalOpen(false)
+      setJustifOpen(true)
+      return
+    }
+    await persistirCronoObra(payload, entrega, null)
+    setCronoModalOpen(false)
+  }
+
+  // Persiste o cronograma da obra (+ "preencher vazios" nos itens) e, se houver, o ajuste de prazo.
+  async function persistirCronoObra(payload, entrega, ajuste) {
+    await supabase.from('obras').update({
+      data_inicio: payload.data_inicio,
+      prazo_dias: payload.prazo_dias,
+      cronograma_fases: payload.cronograma_fases,
+      data_entrega_prometida: entrega,
+    }).eq('id', id)
+    // Aplica aos itens — só preenche os que ainda não têm cronograma próprio.
+    const semCrono = moveis.filter(m => !temCronograma(m))
+    await Promise.all(semCrono.map(m => {
+      const upd = {
         data_inicio: payload.data_inicio,
         prazo_dias: payload.prazo_dias,
         cronograma_fases: payload.cronograma_fases,
-        data_entrega_prometida: entrega,
-      }).eq('id', id)
-      // Aplica aos itens — só preenche os que ainda não têm cronograma próprio.
-      const semCrono = moveis.filter(m => !temCronograma(m))
-      await Promise.all(semCrono.map(m => {
-        const upd = {
-          data_inicio: payload.data_inicio,
-          prazo_dias: payload.prazo_dias,
-          cronograma_fases: payload.cronograma_fases,
-        }
-        if (!m.previsao_entrega) upd.previsao_entrega = entrega
-        return supabase.from('moveis').update(upd).eq('id', m.id)
-      }))
-    }
-    setCronoModalOpen(false)
+      }
+      if (!m.previsao_entrega) upd.previsao_entrega = entrega
+      return supabase.from('moveis').update(upd).eq('id', m.id)
+    }))
+    if (ajuste) await supabase.from('obra_prazo_ajustes').insert(ajuste)
     loadData()
+  }
+
+  async function confirmarJustificativa(e) {
+    e.preventDefault()
+    if (!justifTexto.trim() || !cronoPendente) return
+    const { payload, entrega, entregaAntiga, diasDelta } = cronoPendente
+    await persistirCronoObra(payload, entrega, {
+      obra_id: id,
+      prazo_anterior: obra.prazo_dias ?? null,
+      prazo_novo: payload.prazo_dias,
+      data_entrega_anterior: entregaAntiga || null,
+      data_entrega_nova: entrega,
+      dias_delta: diasDelta,
+      justificativa: justifTexto.trim(),
+      pendencia_id: justifPendenciaId || null,
+      por: userEmail || null,
+    })
+    setJustifOpen(false)
+    setCronoPendente(null)
   }
 
   // ===== Aplicar templates (só pendências) =====
@@ -437,7 +527,7 @@ export default function ObraDetalhe() {
                   <button onClick={() => setTab('pendencias')} className="text-xs text-primary-600 hover:underline cursor-pointer">Ver tudo</button>
                 </div>
                 <div className="space-y-2">
-                  {pendAbertas.slice(0, 5).map(p => <PendLine key={p.id} pend={p} onToggle={() => togglePend(p)} />)}
+                  {pendAbertas.slice(0, 5).map(p => <PendLine key={p.id} pend={p} onToggle={() => onTogglePend(p)} />)}
                 </div>
               </CardBody>
             </Card>
@@ -495,7 +585,7 @@ export default function ObraDetalhe() {
                           <input
                             type="checkbox"
                             checked={p.status === 'resolvida'}
-                            onChange={() => togglePend(p)}
+                            onChange={() => onTogglePend(p)}
                             className="w-4 h-4 mt-0.5 cursor-pointer"
                           />
                           <div className="flex-1 min-w-0">
@@ -514,6 +604,15 @@ export default function ObraDetalhe() {
                                 return mv ? <span className="text-blue-600">📦 {mv.codigo} — {mv.nome}</span> : null
                               })()}
                             </div>
+                            {p.status === 'resolvida' && (
+                              <div className="mt-1.5 text-xs bg-emerald-50 border border-emerald-100 rounded px-2 py-1.5 text-emerald-800">
+                                <span className="font-medium">✓ Resolvida</span>
+                                {p.resolvida_em && <> em {new Date(p.resolvida_em).toLocaleDateString('pt-BR')}</>}
+                                {p.created_at && p.resolvida_em && <> · ficou {diffDias(p.created_at, p.resolvida_em)} dia(s) em aberto</>}
+                                {p.resolvida_por && <> · por {p.resolvida_por}</>}
+                                {p.nota_resolucao && <div className="mt-0.5 text-emerald-900">{p.nota_resolucao}</div>}
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-1">
                             <button onClick={() => openEditPend(p)} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded cursor-pointer"><Pencil size={14} /></button>
@@ -567,6 +666,36 @@ export default function ObraDetalhe() {
               <p className="text-gray-500 mb-4">Defina a data de início e o prazo total para montar a barra de fases.</p>
               <Btn onClick={openCronoModal}><Plus size={16} /> Definir cronograma</Btn>
             </CardBody></Card>
+          )}
+
+          {/* Ajustes de prazo (histórico/justificativas) */}
+          {prazoAjustes.length > 0 && (
+            <Card className="mt-4">
+              <CardBody>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Ajustes de prazo ({prazoAjustes.length})</h3>
+                <div className="space-y-2">
+                  {prazoAjustes.map(a => {
+                    const pend = a.pendencia_id ? pendencias.find(p => p.id === a.pendencia_id) : null
+                    return (
+                      <div key={a.id} className="border border-gray-100 rounded-lg p-3">
+                        <div className="flex items-center gap-2 flex-wrap text-sm">
+                          <span className="text-gray-500">{fmtData(a.data_entrega_anterior)} → <strong className="text-gray-900">{fmtData(a.data_entrega_nova)}</strong></span>
+                          {a.dias_delta != null && (
+                            <Badge color={a.dias_delta > 0 ? '#ef4444' : '#10b981'}>{a.dias_delta > 0 ? `+${a.dias_delta}` : a.dias_delta} dias</Badge>
+                          )}
+                        </div>
+                        {a.justificativa && <p className="text-sm text-gray-700 mt-1">{a.justificativa}</p>}
+                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
+                          {pend && <span className="text-amber-700">⚠ {pend.titulo}</span>}
+                          {a.por && <span>por {a.por}</span>}
+                          {a.created_at && <span>{new Date(a.created_at).toLocaleDateString('pt-BR')}</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardBody>
+            </Card>
           )}
         </div>
       )}
@@ -902,7 +1031,7 @@ export default function ObraDetalhe() {
                     const tipo = TIPO_PENDENCIA_MAP[p.tipo]
                     return (
                       <div key={p.id} className="flex items-start gap-2 p-2 border border-gray-100 rounded-lg hover:bg-gray-50">
-                        <input type="checkbox" checked={p.status === 'resolvida'} onChange={() => togglePend(p)} className="w-4 h-4 mt-0.5 cursor-pointer" />
+                        <input type="checkbox" checked={p.status === 'resolvida'} onChange={() => onTogglePend(p)} className="w-4 h-4 mt-0.5 cursor-pointer" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             {tipo && <Badge color={tipo.cor}>{tipo.label}</Badge>}
@@ -977,6 +1106,70 @@ export default function ObraDetalhe() {
         valorInicial={cronoValor}
         onSave={handleSaveCrono}
       />
+
+      {/* MODAL: Resolver pendência (com nota) */}
+      <Modal open={resolveOpen} onClose={() => setResolveOpen(false)} title="Resolver pendência">
+        <form onSubmit={confirmarResolucao} className="space-y-3">
+          {resolvendoPend && (
+            <div className="text-sm text-gray-700 bg-gray-50 rounded-lg p-2.5">
+              <strong>{resolvendoPend.titulo}</strong>
+              {resolvendoPend.created_at && (
+                <span className="text-xs text-gray-500"> · aberta há {diffDias(resolvendoPend.created_at, new Date())} dia(s)</span>
+              )}
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Como foi resolvida? <span className="text-gray-400 font-normal">(motivo/efeito — ex.: cliente aprovou a amostra, atrasou 12 dias)</span></label>
+            <textarea
+              value={notaResolucao}
+              onChange={e => setNotaResolucao(e.target.value)}
+              rows={3}
+              autoFocus
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Registre o que destravou e o impacto no prazo, para não se perder."
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Btn type="button" variant="secondary" onClick={() => setResolveOpen(false)}>Cancelar</Btn>
+            <Btn type="submit"><CheckCircle2 size={15} /> Marcar resolvida</Btn>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL: Justificativa de postergação de prazo */}
+      <Modal open={justifOpen} onClose={() => { setJustifOpen(false); setCronoPendente(null) }} title="Justificar mudança de prazo">
+        <form onSubmit={confirmarJustificativa} className="space-y-3">
+          {cronoPendente && (
+            <div className="text-sm bg-amber-50 border border-amber-100 rounded-lg p-2.5 text-amber-800">
+              A entrega vai de <strong>{fmtData(cronoPendente.entregaAntiga)}</strong> para <strong>{fmtData(cronoPendente.entrega)}</strong>
+              {' '}(<strong>+{cronoPendente.diasDelta} dias</strong>). Registre o motivo do atraso.
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Justificativa *</label>
+            <textarea
+              value={justifTexto}
+              onChange={e => setJustifTexto(e.target.value)}
+              rows={3}
+              autoFocus
+              required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Ex: Cliente demorou para aprovar a amostra de laca."
+            />
+          </div>
+          <Select
+            label="Pendência que causou o atraso (opcional)"
+            value={justifPendenciaId}
+            onChange={e => setJustifPendenciaId(e.target.value)}
+            placeholder="— nenhuma —"
+            options={pendencias.map(p => ({ value: p.id, label: `${p.titulo}${p.status === 'resolvida' ? ' (resolvida)' : ''}` }))}
+          />
+          <div className="flex justify-end gap-2 pt-1">
+            <Btn type="button" variant="secondary" onClick={() => { setJustifOpen(false); setCronoPendente(null) }}>Cancelar</Btn>
+            <Btn type="submit" disabled={!justifTexto.trim()}>Salvar com justificativa</Btn>
+          </div>
+        </form>
+      </Modal>
 
       {/* MODAL: Aplicar pendências sugeridas */}
       <Modal open={aplicarTemplateOpen} onClose={() => setAplicarTemplateOpen(false)} title="Aplicar pendências sugeridas">

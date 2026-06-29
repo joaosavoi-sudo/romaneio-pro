@@ -4,7 +4,7 @@ import { AlertCircle, Search, Building2, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { diasAte } from '../lib/itemStatus'
 import { TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP, STATUS_PENDENCIA_MAP } from '../lib/templates'
-import { Btn, Card, CardBody, Select, Badge } from '../components/ui'
+import { Btn, Card, CardBody, Select, Badge, Modal } from '../components/ui'
 import ResponsavelInput from '../components/ResponsavelInput'
 
 export default function Pendencias() {
@@ -22,28 +22,49 @@ export default function Pendencias() {
     return ['vencidas', 'sem_prazo'].includes(f) ? f : ''
   })
   const [busca, setBusca] = useState('')
+  const [filtroStatusPend, setFiltroStatusPend] = useState('aberta') // aberta | resolvida | todas
   const [ordenacao, setOrdenacao] = useState({ campo: 'prazo', dir: 'asc' })
 
-  useEffect(() => { loadData() }, [])
+  // Resolver com nota
+  const [resolveOpen, setResolveOpen] = useState(false)
+  const [resolvendo, setResolvendo] = useState(null)
+  const [nota, setNota] = useState('')
+  const [userEmail, setUserEmail] = useState('')
+
+  useEffect(() => { loadData() }, [filtroStatusPend])
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email || '')) }, [])
 
   async function loadData() {
-    const { data } = await supabase
+    setLoading(true)
+    let q = supabase
       .from('pendencias')
       .select('*, obras(id, codigo, cliente, arquiteto, construtora), moveis(id, codigo, nome, descricao)')
-      .eq('status', 'aberta')
-      .order('created_at', { ascending: false })
+    if (filtroStatusPend !== 'todas') q = q.eq('status', filtroStatusPend)
+    const { data } = await q.order('created_at', { ascending: false })
     setPendencias(data || [])
     setLoading(false)
   }
 
-  async function resolver(p, e) {
+  function abrirResolver(p, e) {
     e.stopPropagation()
-    const { data: { user } } = await supabase.auth.getUser()
+    setResolvendo(p)
+    setNota('')
+    setResolveOpen(true)
+  }
+
+  async function confirmarResolver(e) {
+    e?.preventDefault?.()
+    if (!resolvendo) return
     await supabase.from('pendencias').update({
       status: 'resolvida',
       resolvida_em: new Date().toISOString(),
-      resolvida_por: user?.email || null,
-    }).eq('id', p.id)
+      resolvida_por: userEmail || null,
+      nota_resolucao: nota.trim() || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', resolvendo.id)
+    setResolveOpen(false)
+    setResolvendo(null)
+    setNota('')
     loadData()
   }
 
@@ -108,15 +129,24 @@ export default function Pendencias() {
         <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <AlertCircle size={26} className="text-primary-600" /> Pendências
         </h2>
-        <p className="text-sm text-gray-500">Todas as pendências em aberto, de todas as obras.</p>
+        <p className="text-sm text-gray-500">Pendências de todas as obras — abertas e o histórico das resolvidas.</p>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <FocoChip cor="#ef4444" label="Vencidas" count={cont.vencidas} ativo={filtroFoco === 'vencidas'} onClick={() => setFiltroFoco(filtroFoco === 'vencidas' ? '' : 'vencidas')} />
-        <FocoChip cor="#f59e0b" label="Sem prazo" count={cont.sem_prazo} ativo={filtroFoco === 'sem_prazo'} onClick={() => setFiltroFoco(filtroFoco === 'sem_prazo' ? '' : 'sem_prazo')} />
-        <FocoChip cor="#10b981" label="No prazo" count={cont.no_prazo} ativo={filtroFoco === 'no_prazo'} onClick={() => setFiltroFoco(filtroFoco === 'no_prazo' ? '' : 'no_prazo')} />
+      {/* Abas de status */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <StatusPendTab label="Abertas" ativo={filtroStatusPend === 'aberta'} onClick={() => setFiltroStatusPend('aberta')} />
+        <StatusPendTab label="Resolvidas" ativo={filtroStatusPend === 'resolvida'} onClick={() => setFiltroStatusPend('resolvida')} />
+        <StatusPendTab label="Todas" ativo={filtroStatusPend === 'todas'} onClick={() => setFiltroStatusPend('todas')} />
       </div>
+
+      {/* KPIs (foco de prazo só faz sentido para abertas) */}
+      {filtroStatusPend === 'aberta' && (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <FocoChip cor="#ef4444" label="Vencidas" count={cont.vencidas} ativo={filtroFoco === 'vencidas'} onClick={() => setFiltroFoco(filtroFoco === 'vencidas' ? '' : 'vencidas')} />
+          <FocoChip cor="#f59e0b" label="Sem prazo" count={cont.sem_prazo} ativo={filtroFoco === 'sem_prazo'} onClick={() => setFiltroFoco(filtroFoco === 'sem_prazo' ? '' : 'sem_prazo')} />
+          <FocoChip cor="#10b981" label="No prazo" count={cont.no_prazo} ativo={filtroFoco === 'no_prazo'} onClick={() => setFiltroFoco(filtroFoco === 'no_prazo' ? '' : 'no_prazo')} />
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-2 mb-4">
@@ -167,7 +197,7 @@ export default function Pendencias() {
       {pendencias.length === 0 ? (
         <Card><CardBody className="text-center py-12">
           <Check size={48} className="mx-auto text-emerald-300 mb-3" />
-          <p className="text-gray-500">Nenhuma pendência em aberto. 🎉</p>
+          <p className="text-gray-500">{filtroStatusPend === 'resolvida' ? 'Nenhuma pendência resolvida ainda.' : 'Nenhuma pendência em aberto. 🎉'}</p>
         </CardBody></Card>
       ) : filtrados.length === 0 ? (
         <Card><CardBody className="text-center py-8 text-gray-500">Nenhuma pendência bate com os filtros.</CardBody></Card>
@@ -202,7 +232,12 @@ export default function Pendencias() {
                       <td className="px-3 py-2.5 text-gray-700 max-w-[160px] truncate" title={p.obras?.cliente}>{p.obras?.cliente || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap font-mono text-xs">{p.moveis?.codigo || '—'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap"><Badge color={tipo?.cor}>{tipo?.label || p.tipo}</Badge></td>
-                      <td className="px-3 py-2.5 text-gray-700 max-w-[280px] truncate" title={p.titulo}>{p.titulo}</td>
+                      <td className="px-3 py-2.5 max-w-[280px]">
+                        <div className="text-gray-700 truncate" title={p.titulo}>{p.titulo}</div>
+                        {p.status === 'resolvida' && p.nota_resolucao && (
+                          <div className="text-xs text-emerald-700 truncate" title={p.nota_resolucao}>✓ {p.nota_resolucao}</div>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{p.responsavel || '—'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         {p.prazo ? (
@@ -213,13 +248,19 @@ export default function Pendencias() {
                         ) : <span className="text-amber-600 text-xs">sem prazo</span>}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
-                        <button
-                          onClick={e => resolver(p, e)}
-                          title="Marcar como resolvida"
-                          className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1 cursor-pointer"
-                        >
-                          <Check size={13} /> Resolver
-                        </button>
+                        {p.status === 'aberta' ? (
+                          <button
+                            onClick={e => abrirResolver(p, e)}
+                            title="Marcar como resolvida"
+                            className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1 cursor-pointer"
+                          >
+                            <Check size={13} /> Resolver
+                          </button>
+                        ) : (
+                          <span className="text-xs text-emerald-700" title={p.nota_resolucao || ''}>
+                            ✓ {p.resolvida_em ? new Date(p.resolvida_em).toLocaleDateString('pt-BR') : 'resolvida'}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
@@ -229,7 +270,47 @@ export default function Pendencias() {
           </div>
         </Card>
       )}
+
+      {/* MODAL: resolver com nota */}
+      <Modal open={resolveOpen} onClose={() => setResolveOpen(false)} title="Resolver pendência">
+        <form onSubmit={confirmarResolver} className="space-y-3">
+          {resolvendo && (
+            <div className="text-sm text-gray-700 bg-gray-50 rounded-lg p-2.5">
+              <strong>{resolvendo.titulo}</strong>
+              {resolvendo.obras?.codigo && <span className="text-xs text-gray-500"> · {resolvendo.obras.codigo}</span>}
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Como foi resolvida? <span className="text-gray-400 font-normal">(motivo/efeito no prazo)</span></label>
+            <textarea
+              value={nota}
+              onChange={e => setNota(e.target.value)}
+              rows={3}
+              autoFocus
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Registre o que destravou e o impacto no prazo, para não se perder."
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Btn type="button" variant="secondary" onClick={() => setResolveOpen(false)}>Cancelar</Btn>
+            <Btn type="submit"><Check size={15} /> Marcar resolvida</Btn>
+          </div>
+        </form>
+      </Modal>
     </div>
+  )
+}
+
+function StatusPendTab({ label, ativo, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
+        ativo ? 'bg-primary-50 border-primary-300 text-primary-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+      }`}
+    >
+      {label}
+    </button>
   )
 }
 
