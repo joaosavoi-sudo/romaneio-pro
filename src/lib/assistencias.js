@@ -51,8 +51,3 @@ export function assistenciaAtrasada(a) {
   }
   return false
 }
-
-// "A cobrar" = fora de garantia e ainda não concluída/cobrada (tem valor ou está aberta).
-export function assistenciaACobrar(a) {
-  return a && a.em_garantia === false
-}

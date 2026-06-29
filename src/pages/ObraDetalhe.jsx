@@ -670,7 +670,7 @@ export default function ObraDetalhe() {
 
       {/* TAB: Assistência */}
       {tab === 'assistencia' && (
-        <AssistenciaObra obra={obra} moveis={moveis} onChange={loadData} />
+        <AssistenciaObra obra={obra} onChange={loadData} />
       )}
 
       {/* TAB: Cronograma */}
