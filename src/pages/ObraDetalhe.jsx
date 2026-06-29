@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, ClipboardList, Trash2, Box, Pencil,
   AlertCircle, Calendar, Paperclip, FileBarChart, LayoutGrid,
-  ListChecks, Search, CheckCircle2, RotateCcw, GitBranch, MessageCircle, Palette,
+  ListChecks, Search, CheckCircle2, RotateCcw, GitBranch, MessageCircle, Palette, Wrench,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, OBRA_STATUS } from '../lib/constants'
@@ -22,6 +22,7 @@ import ResponsavelInput from '../components/ResponsavelInput'
 import ProcessoObra from '../components/ProcessoObra'
 import ComunicacaoObra from '../components/ComunicacaoObra'
 import AmostrasObra, { FotoThumb } from '../components/AmostrasObra'
+import AssistenciaObra from '../components/AssistenciaObra'
 import { OBRA_ETAPA_MAP, etapaAtual } from '../lib/processo'
 import { TIPO_AMOSTRA_MAP, STATUS_AMOSTRA_MAP } from '../lib/amostras'
 
@@ -513,6 +514,7 @@ export default function ObraDetalhe() {
         <TabBtn current={tab} value="pendencias" onClick={setTab} icon={AlertCircle} label={`Pendências${pendAbertas.length > 0 ? ` (${pendAbertas.length})` : ''}`} />
         <TabBtn current={tab} value="comunicacao" onClick={setTab} icon={MessageCircle} label="Comunicação" />
         <TabBtn current={tab} value="amostras" onClick={setTab} icon={Palette} label="Amostras" />
+        <TabBtn current={tab} value="assistencia" onClick={setTab} icon={Wrench} label="Assistência" />
         <TabBtn current={tab} value="cronograma" onClick={setTab} icon={Calendar} label="Cronograma" />
         <TabBtn current={tab} value="moveis" onClick={setTab} icon={Box} label={`Itens (${moveis.length})`} />
         <TabBtn current={tab} value="romaneios" onClick={setTab} icon={ClipboardList} label={`Romaneios (${romaneios.length})`} />
@@ -664,6 +666,11 @@ export default function ObraDetalhe() {
       {/* TAB: Amostras */}
       {tab === 'amostras' && (
         <AmostrasObra obra={obra} moveis={moveis} onChange={loadData} />
+      )}
+
+      {/* TAB: Assistência */}
+      {tab === 'assistencia' && (
+        <AssistenciaObra obra={obra} moveis={moveis} onChange={loadData} />
       )}
 
       {/* TAB: Cronograma */}

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, Package, ScanLine, AlertTriangle, CalendarClock, Ban, MessageCircle } from 'lucide-react'
+import { Building2, Package, ScanLine, AlertTriangle, CalendarClock, Ban, MessageCircle, Wrench } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, SEMAFORO } from '../lib/constants'
 import { OBRA_ETAPAS, etapaAtual } from '../lib/processo'
 import { INTERVALO_CONTATO_DIAS, diasDesde } from '../lib/comunicacao'
+import { assistenciaAtrasada } from '../lib/assistencias'
 import { calcularEtapaItem, calcularSemaforo, diasAte } from '../lib/itemStatus'
 import { Card, CardBody } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
@@ -38,6 +39,7 @@ export default function Dashboard() {
   const [pendenciasPorMovel, setPendenciasPorMovel] = useState({})
   const [obrasPorEtapa, setObrasPorEtapa] = useState({})
   const [obrasAComunicar, setObrasAComunicar] = useState(0)
+  const [assist, setAssist] = useState({ atrasadas: 0, cobrar: 0 })
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export default function Dashboard() {
   }, [])
 
   async function loadStats() {
-    const [obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes, contatosRes] = await Promise.all([
+    const [obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes, contatosRes, assistRes] = await Promise.all([
       supabase.from('obras').select('id, etapa_atual, created_at').eq('status', 'ativa'),
       supabase.from('pecas').select('id, etapa, movel_id'),
       supabase.from('romaneios').select('id', { count: 'exact', head: true }),
@@ -53,6 +55,7 @@ export default function Dashboard() {
       supabase.from('moveis').select('*, obras(id, codigo, cliente, status)').order('codigo', { ascending: true }),
       supabase.from('pendencias').select('id, status, prazo, movel_id').not('movel_id', 'is', null),
       supabase.from('obra_contatos').select('obra_id, data'),
+      supabase.from('assistencias').select('status, em_garantia, prazo_agendar, data_agendada, prazo_concluir'),
     ])
 
     setStats({
@@ -80,6 +83,13 @@ export default function Dashboard() {
       return d != null && d >= INTERVALO_CONTATO_DIAS
     }).length
     setObrasAComunicar(aComunicar)
+
+    // Assistências: atrasadas e a cobrar (pendentes de pós-venda)
+    const assistData = assistRes.data || []
+    setAssist({
+      atrasadas: assistData.filter(a => assistenciaAtrasada(a)).length,
+      cobrar: assistData.filter(a => a.em_garantia === false && a.status !== 'cancelada').length,
+    })
 
     const counts = {}
     ETAPAS.forEach(e => { counts[e.id] = 0 })
@@ -176,6 +186,21 @@ export default function Dashboard() {
           <MessageCircle size={20} className="text-amber-600 shrink-0" />
           <span className="text-sm text-amber-800">
             <strong>{obrasAComunicar}</strong> obra(s) ativa(s) sem contato com o cliente há {INTERVALO_CONTATO_DIAS}+ dias — atualize-os antes que perguntem.
+          </span>
+        </button>
+      )}
+
+      {/* Alerta: assistências atrasadas / a cobrar */}
+      {(assist.atrasadas > 0 || assist.cobrar > 0) && (
+        <button
+          onClick={() => navigate('/assistencias')}
+          className="w-full mb-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-left cursor-pointer hover:bg-red-100/60"
+        >
+          <Wrench size={20} className="text-red-600 shrink-0" />
+          <span className="text-sm text-red-800">
+            {assist.atrasadas > 0 && <><strong>{assist.atrasadas}</strong> assistência(s) atrasada(s)</>}
+            {assist.atrasadas > 0 && assist.cobrar > 0 && ' · '}
+            {assist.cobrar > 0 && <><strong>{assist.cobrar}</strong> a cobrar (fora de garantia)</>}
           </span>
         </button>
       )}

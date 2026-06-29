@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ClipboardList, ScanLine,
-  Tag, Package, LogOut, Menu, X, FileBarChart, Smartphone, FileUp, ListChecks, AlertCircle, Users, Palette
+  Tag, Package, LogOut, Menu, X, FileBarChart, Smartphone, FileUp, ListChecks, AlertCircle, Users, Palette, Wrench
 } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/itens', icon: ListChecks, label: 'Itens' },
   { to: '/pendencias', icon: AlertCircle, label: 'Pendências' },
   { to: '/amostras', icon: Palette, label: 'Amostras' },
+  { to: '/assistencias', icon: Wrench, label: 'Assistência' },
   { to: '/romaneios', icon: ClipboardList, label: 'Romaneios' },
   { to: '/pecas', icon: Package, label: 'Peças' },
   { to: '/scanner', icon: ScanLine, label: 'Scanner' },
