@@ -30,6 +30,8 @@ delete from obra_marcos;
 delete from anexos_obra;
 delete from obra_contatos;
 delete from obra_prazo_ajustes;
+delete from amostra_itens;
+delete from amostras;
 delete from moveis;
 delete from romaneios;
 delete from obras;
