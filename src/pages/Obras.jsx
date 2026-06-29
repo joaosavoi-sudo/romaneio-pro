@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Building2, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { OBRA_STATUS, gerarCodigo } from '../lib/constants'
+import { OBRA_ETAPA_MAP, etapaAtual } from '../lib/processo'
 import { Btn, Input, Select, Modal, Card, CardBody, Badge } from '../components/ui'
 
 export default function Obras() {
@@ -130,6 +131,7 @@ export default function Obras() {
         <div className="space-y-3">
           {filtered.map(obra => {
             const statusInfo = OBRA_STATUS.find(s => s.id === obra.status)
+            const etapaInf = OBRA_ETAPA_MAP[etapaAtual(obra)]
             return (
               <Card
                 key={obra.id}
@@ -142,9 +144,10 @@ export default function Obras() {
                       <Building2 size={20} className="text-primary-600" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-gray-900">{obra.codigo}</span>
                         <Badge color={statusInfo?.cor}>{statusInfo?.label}</Badge>
+                        {obra.status === 'ativa' && etapaInf && <Badge color={etapaInf.cor}>{etapaInf.label}</Badge>}
                       </div>
                       <p className="text-sm text-gray-600">{obra.cliente}</p>
                       {obra.endereco && <p className="text-xs text-gray-400">{obra.endereco}</p>}

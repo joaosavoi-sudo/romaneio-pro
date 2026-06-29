@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, ClipboardList, Trash2, Box, Pencil,
   AlertCircle, Calendar, Paperclip, FileBarChart, LayoutGrid,
-  ListChecks, Search, CheckCircle2, RotateCcw,
+  ListChecks, Search, CheckCircle2, RotateCcw, GitBranch,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, OBRA_STATUS } from '../lib/constants'
@@ -19,6 +19,8 @@ import AnexosObra from '../components/AnexosObra'
 import CronogramaBar from '../components/CronogramaBar'
 import CronogramaEditorModal from '../components/CronogramaEditorModal'
 import ResponsavelInput from '../components/ResponsavelInput'
+import ProcessoObra from '../components/ProcessoObra'
+import { OBRA_ETAPA_MAP, etapaAtual } from '../lib/processo'
 
 const EMPTY_MOVEL = {
   codigo: '', nome: '', ambiente: '', descricao: '', dimensoes: '',
@@ -330,6 +332,7 @@ export default function ObraDetalhe() {
 
   const pendAbertas = pendencias.filter(p => p.status === 'aberta')
   const statusObraInfo = OBRA_STATUS.find(s => s.id === obra.status)
+  const etapaObraInfo = OBRA_ETAPA_MAP[etapaAtual(obra)]
   const todosEntregues = moveis.length > 0 && moveis.every(m => m.status_pos_expedicao === 'entregue')
   const fasesCronograma = calcFases(obra)
   const dataFimObra = fasesCronograma[fasesCronograma.length - 1]?.dataFim
@@ -357,6 +360,11 @@ export default function ObraDetalhe() {
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-2xl font-bold text-gray-900">{obra.codigo}</h2>
             <Badge color={statusObraInfo?.cor || '#6b7280'}>{statusObraInfo?.label || obra.status}</Badge>
+            {etapaObraInfo && (
+              <button onClick={() => setTab('processo')} className="cursor-pointer" title="Ver processo da obra">
+                <Badge color={etapaObraInfo.cor}>{etapaObraInfo.label}</Badge>
+              </button>
+            )}
             {pendAbertas.length > 0 && (
               <Badge color="#f59e0b">{pendAbertas.length} pendência(s)</Badge>
             )}
@@ -389,6 +397,7 @@ export default function ObraDetalhe() {
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
         <TabBtn current={tab} value="overview" onClick={setTab} icon={LayoutGrid} label="Visão Geral" />
+        <TabBtn current={tab} value="processo" onClick={setTab} icon={GitBranch} label="Processo" />
         <TabBtn current={tab} value="pendencias" onClick={setTab} icon={AlertCircle} label={`Pendências${pendAbertas.length > 0 ? ` (${pendAbertas.length})` : ''}`} />
         <TabBtn current={tab} value="cronograma" onClick={setTab} icon={Calendar} label="Cronograma" />
         <TabBtn current={tab} value="moveis" onClick={setTab} icon={Box} label={`Itens (${moveis.length})`} />
@@ -517,6 +526,11 @@ export default function ObraDetalhe() {
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB: Processo */}
+      {tab === 'processo' && (
+        <ProcessoObra obra={obra} onChange={loadData} />
       )}
 
       {/* TAB: Cronograma */}

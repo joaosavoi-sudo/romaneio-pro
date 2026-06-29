@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Building2, Package, ScanLine, AlertTriangle, CalendarClock, Ban } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ETAPAS, SEMAFORO } from '../lib/constants'
+import { OBRA_ETAPAS, etapaAtual } from '../lib/processo'
 import { calcularEtapaItem, calcularSemaforo, diasAte } from '../lib/itemStatus'
 import { Card, CardBody } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
@@ -34,6 +35,7 @@ export default function Dashboard() {
   const [moveis, setMoveis] = useState([])
   const [pecasPorMovel, setPecasPorMovel] = useState({})
   const [pendenciasPorMovel, setPendenciasPorMovel] = useState({})
+  const [obrasPorEtapa, setObrasPorEtapa] = useState({})
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function Dashboard() {
 
   async function loadStats() {
     const [obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes] = await Promise.all([
-      supabase.from('obras').select('id', { count: 'exact', head: true }).eq('status', 'ativa'),
+      supabase.from('obras').select('id, etapa_atual').eq('status', 'ativa'),
       supabase.from('pecas').select('id, etapa, movel_id'),
       supabase.from('romaneios').select('id', { count: 'exact', head: true }),
       supabase.from('peca_historico').select('*, pecas(codigo, nome)').order('created_at', { ascending: false }).limit(10),
@@ -51,10 +53,18 @@ export default function Dashboard() {
     ])
 
     setStats({
-      obras: obrasRes.count || 0,
+      obras: obrasRes.data?.length || 0,
       pecas: pecasRes.data?.length || 0,
       romaneios: romaneiosRes.count || 0,
     })
+
+    const etCounts = {}
+    OBRA_ETAPAS.forEach(e => { etCounts[e.id] = 0 })
+    ;(obrasRes.data || []).forEach(o => {
+      const k = etapaAtual(o)
+      if (etCounts[k] != null) etCounts[k]++
+    })
+    setObrasPorEtapa(etCounts)
 
     const counts = {}
     ETAPAS.forEach(e => { counts[e.id] = 0 })
@@ -176,6 +186,24 @@ export default function Dashboard() {
               </div>
             </>
           )}
+        </CardBody>
+      </Card>
+
+      {/* Pipeline de obras por etapa do processo */}
+      <Card className="mb-8">
+        <CardBody>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Obras por Etapa do Processo</h3>
+            <button onClick={() => navigate('/obras')} className="text-xs text-primary-600 hover:underline cursor-pointer">Ver obras</button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {OBRA_ETAPAS.map(e => (
+              <div key={e.id} className="flex-1 min-w-[92px] rounded-lg border border-gray-100 p-2 text-center" style={{ backgroundColor: e.cor + '0d' }}>
+                <div className="text-2xl font-bold" style={{ color: e.cor }}>{obrasPorEtapa[e.id] || 0}</div>
+                <div className="text-[11px] text-gray-500 leading-tight mt-0.5">{e.label}</div>
+              </div>
+            ))}
+          </div>
         </CardBody>
       </Card>
 
