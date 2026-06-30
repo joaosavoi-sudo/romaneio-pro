@@ -21,6 +21,10 @@ dist-ssr
 # Arquivos de modelo/teste com dados reais de cliente (não versionar)
 *MODELO GUIA*.pdf
 *CONTRATO*.pdf
+
+# Artefatos gerados do treinamento (PDF/HTML) — regeráveis via scripts/build-treinamento-pdf.mjs
+docs/TREINAMENTO.pdf
+docs/TREINAMENTO.html
 *.png
 !public/*.png
 !favicons/*.png
