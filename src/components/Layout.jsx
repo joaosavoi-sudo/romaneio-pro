@@ -54,7 +54,7 @@ export default function Layout({ children, user }) {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar desktop */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-200 fixed h-full">
+      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-200 fixed h-full z-30">
         <div className="px-6 py-5 border-b border-gray-100">
           <h1 className="text-xl font-bold text-primary-700 flex items-center gap-2">
             <ClipboardList size={24} />
@@ -119,7 +119,7 @@ export default function Layout({ children, user }) {
       )}
 
       {/* Main content */}
-      <main className="flex-1 lg:ml-64 min-h-screen">
+      <main className="flex-1 min-w-0 overflow-x-clip lg:ml-64 min-h-screen">
         <div className="pt-16 lg:pt-0 p-6">
           {children}
         </div>
