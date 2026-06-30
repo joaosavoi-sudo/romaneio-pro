@@ -25,6 +25,8 @@ dist-ssr
 # Artefatos gerados do treinamento (PDF/HTML) — regeráveis via scripts/build-treinamento-pdf.mjs
 docs/TREINAMENTO.pdf
 docs/TREINAMENTO.html
+# Cartaz das estações: PDF gerado (a fonte docs/cartaz-estacoes.html é versionada) — node scripts/build-cartaz-pdf.mjs
+docs/CARTAZ-ESTACOES.pdf
 *.png
 !public/*.png
 !favicons/*.png

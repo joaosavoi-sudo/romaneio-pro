@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Romaneio Pro — Cartazes das Estações</title>
+<!--
+  Cartaz de chão de fábrica para plastificar e colar na parede.
+  Fonte (editável). Gere o PDF com:  node scripts/build-cartaz-pdf.mjs
+  As 5 estações e cores espelham src/lib/constants.js (ESTACOES).
+  Imprima em A4 PAISAGEM. Cada estação ocupa uma página.
+-->
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #111827; }
+
+  .page {
+    width: 277mm; height: 190mm; padding: 9mm 11mm;
+    page-break-after: always; overflow: hidden;
+    display: flex; flex-direction: column;
+    border: 4px solid var(--c, #10b981); border-radius: 14px;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* Cabeçalho da estação */
+  .head { display: flex; align-items: center; gap: 18px; border-bottom: 5px solid var(--c); padding-bottom: 12px; }
+  .badge { background: var(--c); color: #fff; width: 70px; height: 70px; border-radius: 16px;
+           font-size: 38px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .titles .lbl { font-size: 15pt; color: #6b7280; letter-spacing: 3px; text-transform: uppercase; font-weight: 700; }
+  .titles .name { font-size: 42pt; font-weight: 800; color: var(--c); line-height: 1.02; }
+  .head .emoji { margin-left: auto; font-size: 60px; }
+
+  /* Fluxo das 5 estações */
+  .flow { display: flex; align-items: center; gap: 6px; margin: 16px 0 6px; flex-wrap: wrap; }
+  .chip { padding: 6px 13px; border-radius: 999px; background: #f1f5f9; color: #94a3b8; font-size: 12.5pt; font-weight: 700; }
+  .chip.cur { background: var(--c); color: #fff; box-shadow: 0 0 0 3px rgba(0,0,0,.06); }
+  .arrow { color: #cbd5e1; font-weight: 800; }
+
+  /* Passo a passo */
+  .stepsTitle { font-size: 17pt; font-weight: 800; color: #111827; margin: 16px 0 6px; }
+  .step { display: flex; gap: 16px; align-items: center; margin: 12px 0; font-size: 21pt; line-height: 1.25; }
+  .step .n { flex: none; background: var(--c); color: #fff; width: 46px; height: 46px; border-radius: 50%;
+             font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 21pt; }
+  .step b { color: var(--c); }
+  .ok { color: #16a34a; font-weight: 800; }
+  .no { color: #dc2626; font-weight: 800; }
+  .undo { font-size: 18pt; margin: 6px 0 0 62px; color: #374151; }
+  .undo b { color: #111827; }
+
+  /* Rodapé: caixa do QR + notas */
+  .bottom { margin-top: auto; display: flex; gap: 22px; align-items: center; padding-top: 10px; }
+  .qrbox { flex: none; width: 168px; height: 168px; border: 4px dashed var(--c); border-radius: 14px;
+           display: flex; align-items: center; justify-content: center; text-align: center;
+           color: #64748b; font-size: 11.5pt; font-weight: 600; padding: 10px; }
+  .notes { font-size: 15pt; color: #374151; line-height: 1.6; }
+  .notes b { color: #111827; }
+  .notes .big { font-size: 17pt; }
+
+  /* Página de abertura */
+  .intro { justify-content: center; align-items: center; text-align: center; border-color: #10b981; }
+  .intro h1 { font-size: 40pt; color: #065f46; margin: 0 0 6px; }
+  .intro .sub { font-size: 17pt; color: #374151; margin-bottom: 26px; max-width: 220mm; }
+  .introFlow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 30px; }
+  .introFlow .st { padding: 14px 20px; border-radius: 14px; color: #fff; font-size: 18pt; font-weight: 800; }
+  .introFlow .ar { font-size: 26pt; color: #94a3b8; font-weight: 800; }
+  .introSteps { font-size: 19pt; color: #111827; line-height: 1.8; text-align: left; }
+  .introSteps b { color: #065f46; }
+</style>
+</head>
+<body>
+
+<!-- PÁGINA 0 — Abertura / visão geral -->
+<section class="page intro">
+  <h1>🏭 Chão de fábrica — como funciona</h1>
+  <p class="sub">A peça avança de <b>estação em estação</b> lendo o <b>QR Code</b>. Cada estação tem o seu cartaz com o passo a passo. <b>Não precisa de login</b> — é só a câmera do celular.</p>
+
+  <div class="introFlow">
+    <span class="st" style="background:#3b82f6">🟦 Romaneio</span><span class="ar">→</span>
+    <span class="st" style="background:#f59e0b">🟧 Acabamento</span><span class="ar">→</span>
+    <span class="st" style="background:#8b5cf6">🟪 Conferência</span><span class="ar">→</span>
+    <span class="st" style="background:#10b981">🟩 Embalado/Expedição</span><span class="ar">→</span>
+    <span class="st" style="background:#ef4444">🟥 Carregado/Entrega</span>
+  </div>
+
+  <div class="introSteps">
+    1. 📷 Aponte o celular no <b>QR da estação</b> (na parede).<br>
+    2. 🔳 Aponte no <b>QR da peça</b>.<br>
+    3. ✅ <b>Verde</b> = avançou &nbsp;•&nbsp; ❌ <b>Vermelho</b> = tente de novo &nbsp;•&nbsp; ↩️ Errou? <b>Desfazer</b>.
+  </div>
+</section>
+
+<!-- ESTAÇÃO 1 — Romaneio -->
+<section class="page" style="--c:#3b82f6">
+  <div class="head">
+    <div class="badge">1</div>
+    <div class="titles"><div class="lbl">Estação</div><div class="name">Romaneio</div></div>
+    <div class="emoji">🟦</div>
+  </div>
+  <div class="flow">
+    <span class="chip cur">Romaneio</span><span class="arrow">›</span>
+    <span class="chip">Acabamento</span><span class="arrow">›</span>
+    <span class="chip">Conferência</span><span class="arrow">›</span>
+    <span class="chip">Embalado/Expedição</span><span class="arrow">›</span>
+    <span class="chip">Carregado/Entrega</span>
+  </div>
+  <div class="stepsTitle">Como bipar a peça</div>
+  <div class="step"><span class="n">1</span><span>📷 Aponte o celular no <b>QR desta estação</b> (na parede).</span></div>
+  <div class="step"><span class="n">2</span><span>🔳 Aponte no <b>QR da peça</b>.</span></div>
+  <div class="step"><span class="n">3</span><span><span class="ok">✅ Verde</span> + bipe = avançou &nbsp; <span class="no">❌ Vermelho</span> = repita.</span></div>
+  <div class="undo">↩️ Errou? Toque em <b>DESFAZER</b> (aparece por alguns segundos).</div>
+  <div class="bottom">
+    <div class="qrbox">Cole aqui o<br><b>QR desta estação</b><br><span style="font-size:10pt">(Estações Móveis → Imprimir QR Codes)</span></div>
+    <div class="notes">
+      <span class="big">🔓 <b>Sem login</b> — só a câmera.</span><br>
+      🔢 O contador <b>"Hoje: N"</b> soma as peças da estação.<br>
+      ❓ Dúvidas? Chame a <b>gestão</b>.
+    </div>
+  </div>
+</section>
+
+<!-- ESTAÇÃO 2 — Acabamento -->
+<section class="page" style="--c:#f59e0b">
+  <div class="head">
+    <div class="badge">2</div>
+    <div class="titles"><div class="lbl">Estação</div><div class="name">Acabamento</div></div>
+    <div class="emoji">🟧</div>
+  </div>
+  <div class="flow">
+    <span class="chip">Romaneio</span><span class="arrow">›</span>
+    <span class="chip cur">Acabamento</span><span class="arrow">›</span>
+    <span class="chip">Conferência</span><span class="arrow">›</span>
+    <span class="chip">Embalado/Expedição</span><span class="arrow">›</span>
+    <span class="chip">Carregado/Entrega</span>
+  </div>
+  <div class="stepsTitle">Como bipar a peça</div>
+  <div class="step"><span class="n">1</span><span>📷 Aponte o celular no <b>QR desta estação</b> (na parede).</span></div>
+  <div class="step"><span class="n">2</span><span>🔳 Aponte no <b>QR da peça</b>.</span></div>
+  <div class="step"><span class="n">3</span><span><span class="ok">✅ Verde</span> + bipe = avançou &nbsp; <span class="no">❌ Vermelho</span> = repita.</span></div>
+  <div class="undo">↩️ Errou? Toque em <b>DESFAZER</b> (aparece por alguns segundos).</div>
+  <div class="bottom">
+    <div class="qrbox">Cole aqui o<br><b>QR desta estação</b><br><span style="font-size:10pt">(Estações Móveis → Imprimir QR Codes)</span></div>
+    <div class="notes">
+      <span class="big">🎨 Consulte a <b>fórmula/foto</b> da amostra no item (app).</span><br>
+      🔢 O contador <b>"Hoje: N"</b> soma as peças da estação.<br>
+      ❓ Dúvidas? Chame a <b>gestão</b>.
+    </div>
+  </div>
+</section>
+
+<!-- ESTAÇÃO 3 — Conferência -->
+<section class="page" style="--c:#8b5cf6">
+  <div class="head">
+    <div class="badge">3</div>
+    <div class="titles"><div class="lbl">Estação</div><div class="name">Conferência</div></div>
+    <div class="emoji">🟪</div>
+  </div>
+  <div class="flow">
+    <span class="chip">Romaneio</span><span class="arrow">›</span>
+    <span class="chip">Acabamento</span><span class="arrow">›</span>
+    <span class="chip cur">Conferência</span><span class="arrow">›</span>
+    <span class="chip">Embalado/Expedição</span><span class="arrow">›</span>
+    <span class="chip">Carregado/Entrega</span>
+  </div>
+  <div class="stepsTitle">Como bipar a peça</div>
+  <div class="step"><span class="n">1</span><span>📷 Aponte o celular no <b>QR desta estação</b> (na parede).</span></div>
+  <div class="step"><span class="n">2</span><span>🔳 Aponte no <b>QR da peça</b>.</span></div>
+  <div class="step"><span class="n">3</span><span><span class="ok">✅ Verde</span> + bipe = avançou &nbsp; <span class="no">❌ Vermelho</span> = repita.</span></div>
+  <div class="undo">↩️ Errou? Toque em <b>DESFAZER</b> (aparece por alguns segundos).</div>
+  <div class="bottom">
+    <div class="qrbox">Cole aqui o<br><b>QR desta estação</b><br><span style="font-size:10pt">(Estações Móveis → Imprimir QR Codes)</span></div>
+    <div class="notes">
+      <span class="big">🔍 Confira <b>medidas e acabamento</b> antes de avançar.</span><br>
+      🔢 O contador <b>"Hoje: N"</b> soma as peças da estação.<br>
+      ❓ Achou problema? Chame a <b>gestão</b>.
+    </div>
+  </div>
+</section>
+
+<!-- ESTAÇÃO 4 — Embalado/Expedição -->
+<section class="page" style="--c:#10b981">
+  <div class="head">
+    <div class="badge">4</div>
+    <div class="titles"><div class="lbl">Estação</div><div class="name">Embalado/Expedição</div></div>
+    <div class="emoji">🟩</div>
+  </div>
+  <div class="flow">
+    <span class="chip">Romaneio</span><span class="arrow">›</span>
+    <span class="chip">Acabamento</span><span class="arrow">›</span>
+    <span class="chip">Conferência</span><span class="arrow">›</span>
+    <span class="chip cur">Embalado/Expedição</span><span class="arrow">›</span>
+    <span class="chip">Carregado/Entrega</span>
+  </div>
+  <div class="stepsTitle">Como bipar a peça</div>
+  <div class="step"><span class="n">1</span><span>📷 Aponte o celular no <b>QR desta estação</b> (na parede).</span></div>
+  <div class="step"><span class="n">2</span><span>🔳 Aponte no <b>QR da peça</b> (já embalada).</span></div>
+  <div class="step"><span class="n">3</span><span><span class="ok">✅ Verde</span> + bipe = avançou &nbsp; <span class="no">❌ Vermelho</span> = repita.</span></div>
+  <div class="undo">↩️ Errou? Toque em <b>DESFAZER</b> (aparece por alguns segundos).</div>
+  <div class="bottom">
+    <div class="qrbox">Cole aqui o<br><b>QR desta estação</b><br><span style="font-size:10pt">(Estações Móveis → Imprimir QR Codes)</span></div>
+    <div class="notes">
+      <span class="big">📦 Bipe a peça <b>depois de embalada</b>.</span><br>
+      🔢 O contador <b>"Hoje: N"</b> soma as peças da estação.<br>
+      ❓ Dúvidas? Chame a <b>gestão</b>.
+    </div>
+  </div>
+</section>
+
+<!-- ESTAÇÃO 5 — Carregado/Entrega -->
+<section class="page" style="--c:#ef4444">
+  <div class="head">
+    <div class="badge">5</div>
+    <div class="titles"><div class="lbl">Estação</div><div class="name">Carregado/Entrega</div></div>
+    <div class="emoji">🟥</div>
+  </div>
+  <div class="flow">
+    <span class="chip">Romaneio</span><span class="arrow">›</span>
+    <span class="chip">Acabamento</span><span class="arrow">›</span>
+    <span class="chip">Conferência</span><span class="arrow">›</span>
+    <span class="chip">Embalado/Expedição</span><span class="arrow">›</span>
+    <span class="chip cur">Carregado/Entrega</span>
+  </div>
+  <div class="stepsTitle">Como bipar a peça</div>
+  <div class="step"><span class="n">1</span><span>📷 Aponte o celular no <b>QR desta estação</b> (na parede/caminhão).</span></div>
+  <div class="step"><span class="n">2</span><span>🔳 Aponte no <b>QR da peça</b> ao carregar.</span></div>
+  <div class="step"><span class="n">3</span><span><span class="ok">✅ Verde</span> + bipe = avançou &nbsp; <span class="no">❌ Vermelho</span> = repita.</span></div>
+  <div class="undo">↩️ Errou? Toque em <b>DESFAZER</b> (aparece por alguns segundos).</div>
+  <div class="bottom">
+    <div class="qrbox">Cole aqui o<br><b>QR desta estação</b><br><span style="font-size:10pt">(Estações Móveis → Imprimir QR Codes)</span></div>
+    <div class="notes">
+      <span class="big">🚚 Última estação — peça <b>a caminho do cliente</b>.</span><br>
+      🔢 O contador <b>"Hoje: N"</b> soma as peças carregadas.<br>
+      ❓ Faltou peça? Chame a <b>gestão</b>.
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
