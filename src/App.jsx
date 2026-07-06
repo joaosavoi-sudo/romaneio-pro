@@ -21,6 +21,7 @@ import Relatorio from './pages/Relatorio'
 import EstacaoIndex from './pages/EstacaoIndex'
 import EstacaoScanner from './pages/EstacaoScanner'
 import ImportarGuia from './pages/ImportarGuia'
+import Backup from './pages/Backup'
 
 function ProtectedRoute({ children, user }) {
   if (!user) return <Navigate to="/login" replace />
@@ -65,6 +66,7 @@ export default function App() {
       <Route path="/scanner" element={<ProtectedRoute user={user}><Scanner /></ProtectedRoute>} />
       <Route path="/etiquetas" element={<ProtectedRoute user={user}><Etiquetas /></ProtectedRoute>} />
       <Route path="/relatorio" element={<ProtectedRoute user={user}><Relatorio /></ProtectedRoute>} />
+      <Route path="/backup" element={<ProtectedRoute user={user}><Backup /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
