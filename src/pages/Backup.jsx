@@ -8,7 +8,7 @@ const TABELAS = [
   'obras', 'romaneios', 'moveis', 'pecas', 'peca_historico',
   'pendencias', 'obra_marcos', 'obra_contatos', 'obra_prazo_ajustes',
   'amostras', 'amostra_itens', 'assistencias', 'equipe',
-  'retrabalhos', 'reunioes',
+  'retrabalhos', 'reunioes', 'ia_analises',
 ]
 
 // O Supabase limita cada consulta a 1000 linhas — busca em blocos até o fim
