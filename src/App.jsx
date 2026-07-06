@@ -23,6 +23,7 @@ import EstacaoScanner from './pages/EstacaoScanner'
 import ImportarGuia from './pages/ImportarGuia'
 import Backup from './pages/Backup'
 import Kpis from './pages/Kpis'
+import ReuniaoSemanal from './pages/ReuniaoSemanal'
 
 function ProtectedRoute({ children, user }) {
   if (!user) return <Navigate to="/login" replace />
@@ -52,6 +53,7 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/" element={<ProtectedRoute user={user}><Dashboard /></ProtectedRoute>} />
       <Route path="/kpis" element={<ProtectedRoute user={user}><Kpis /></ProtectedRoute>} />
+      <Route path="/reuniao" element={<ProtectedRoute user={user}><ReuniaoSemanal /></ProtectedRoute>} />
       <Route path="/importar" element={<ProtectedRoute user={user}><ImportarGuia /></ProtectedRoute>} />
       <Route path="/obras" element={<ProtectedRoute user={user}><Obras /></ProtectedRoute>} />
       <Route path="/obras/:id" element={<ProtectedRoute user={user}><ObraDetalhe /></ProtectedRoute>} />
