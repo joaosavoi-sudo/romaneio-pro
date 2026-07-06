@@ -2,13 +2,14 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, ClipboardList, ScanLine,
   Tag, Package, LogOut, Menu, X, FileBarChart, Smartphone, FileUp, ListChecks, AlertCircle, Users, Palette, Wrench,
-  DatabaseBackup,
+  DatabaseBackup, TrendingUp,
 } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/kpis', icon: TrendingUp, label: 'KPIs' },
   { to: '/importar', icon: FileUp, label: 'Importar Guia' },
   { to: '/obras', icon: Building2, label: 'Obras' },
   { to: '/itens', icon: ListChecks, label: 'Itens' },

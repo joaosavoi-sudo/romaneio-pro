@@ -8,6 +8,7 @@ const TABELAS = [
   'obras', 'romaneios', 'moveis', 'pecas', 'peca_historico',
   'pendencias', 'obra_marcos', 'obra_contatos', 'obra_prazo_ajustes',
   'amostras', 'amostra_itens', 'assistencias', 'equipe',
+  'retrabalhos', 'reunioes',
 ]
 
 // O Supabase limita cada consulta a 1000 linhas — busca em blocos até o fim
@@ -38,8 +39,14 @@ export default function Backup() {
       const contagem = {}
       for (const tabela of TABELAS) {
         setProgresso(`Exportando ${tabela}...`)
-        dados[tabela] = await buscarTudo(tabela)
-        contagem[tabela] = dados[tabela].length
+        try {
+          dados[tabela] = await buscarTudo(tabela)
+          contagem[tabela] = dados[tabela].length
+        } catch (e) {
+          // tabela ainda não criada (migration pendente) — segue sem ela
+          if (/does not exist/i.test(e.message || '')) continue
+          throw e
+        }
       }
 
       const hoje = new Date().toISOString().slice(0, 10)

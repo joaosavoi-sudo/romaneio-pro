@@ -13,6 +13,8 @@ export const ESTACOES = [
   { slug: 'conferencia', label: 'Conferência', etapa: 'conferencia', cor: '#8b5cf6' },
   { slug: 'embalagem', label: 'Embalado/Expedição', etapa: 'embalagem', cor: '#10b981' },
   { slug: 'expedicao', label: 'Carregado/Entrega', etapa: 'expedicao', cor: '#ef4444' },
+  // retrabalho: registra o evento (KPI) e devolve a peça para a etapa Romaneio
+  { slug: 'retrabalho', label: 'Retrabalho', etapa: 'romaneio', cor: '#f97316', retrabalho: true },
 ]
 
 export const ESTACAO_MAP = Object.fromEntries(ESTACOES.map(e => [e.slug, e]))

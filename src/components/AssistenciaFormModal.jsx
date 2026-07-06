@@ -12,6 +12,7 @@ const EMPTY = {
   movel_id: '', titulo: '', descricao: '', em_garantia: true, valor_cobranca: '',
   responsavel: '', prazo_agendar: '', prazo_concluir: '', status: 'aberta',
   data_agendada: '', data_conclusao: '', resolucao: '', fotos: [],
+  retrabalho: false, retrabalho_qtde: 1,
 }
 
 // Modal reutilizável de assistência (criar/editar).
@@ -40,6 +41,7 @@ export default function AssistenciaFormModal({ open, onClose, onSaved, editing, 
         responsavel: editing.responsavel || '', prazo_agendar: editing.prazo_agendar || '', prazo_concluir: editing.prazo_concluir || '',
         status: editing.status || 'aberta', data_agendada: editing.data_agendada || '', data_conclusao: editing.data_conclusao || '',
         resolucao: editing.resolucao || '', fotos: Array.isArray(editing.fotos) ? editing.fotos : [],
+        retrabalho: false, retrabalho_qtde: 1,
       })
     } else {
       setForm({ ...EMPTY, obra_id: obraFixa?.id || '', prazo_agendar: prazoAgendarPadrao(), prazo_concluir: prazoConcluirPadrao() })
@@ -107,8 +109,27 @@ export default function AssistenciaFormModal({ open, onClose, onSaved, editing, 
         status: form.status, data_agendada: form.data_agendada || null, data_conclusao: form.data_conclusao || null,
         resolucao: form.resolucao || null, fotos: form.fotos, updated_at: new Date().toISOString(),
       }
-      if (editing) await supabase.from('assistencias').update(payload).eq('id', editing.id)
-      else await supabase.from('assistencias').insert({ ...payload, solicitante: userEmail || null })
+      if (editing) {
+        await supabase.from('assistencias').update(payload).eq('id', editing.id)
+      } else {
+        const { data: criada } = await supabase
+          .from('assistencias')
+          .insert({ ...payload, solicitante: userEmail || null })
+          .select('id')
+          .single()
+        // Retrabalho gerado pela assistência entra no KPI do mês
+        if (form.retrabalho && criada?.id) {
+          await supabase.from('retrabalhos').insert({
+            obra_id: payload.obra_id,
+            movel_id: payload.movel_id,
+            assistencia_id: criada.id,
+            quantidade: Math.max(1, parseInt(form.retrabalho_qtde) || 1),
+            motivo: form.titulo.trim(),
+            origem: 'assistencia',
+            registrado_por: userEmail || null,
+          })
+        }
+      }
       onClose()
       onSaved?.()
     } finally {
@@ -171,6 +192,20 @@ export default function AssistenciaFormModal({ open, onClose, onSaved, editing, 
               onChange={e => setForm({ ...form, valor_cobranca: e.target.value })} className="w-40" />
           )}
         </div>
+
+        {/* Retrabalho de peças (KPI) — registrado na abertura do chamado */}
+        {!editing && (
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.retrabalho} onChange={e => setForm({ ...form, retrabalho: e.target.checked })} className="w-4 h-4 cursor-pointer" />
+              Gerou retrabalho de peça(s)
+            </label>
+            {form.retrabalho && (
+              <Input label="Quantas peças?" type="number" min="1" step="1" value={form.retrabalho_qtde}
+                onChange={e => setForm({ ...form, retrabalho_qtde: e.target.value })} className="w-32" />
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <ResponsavelInput value={form.responsavel} onChange={e => setForm({ ...form, responsavel: e.target.value })} placeholder="Quem vai atender" />

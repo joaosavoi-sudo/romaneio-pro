@@ -72,6 +72,8 @@ export default function ObraDetalhe() {
   const [userEmail, setUserEmail] = useState('')
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
+  const [npsModalOpen, setNpsModalOpen] = useState(false)
+  const [npsForm, setNpsForm] = useState({ nota: null, observacao: '' })
 
   const [tab, setTab] = useState('overview')
 
@@ -442,7 +444,30 @@ export default function ObraDetalhe() {
 
   // ===== Status da obra (concluir/reabrir) =====
   async function mudarStatusObra(novo) {
-    await supabase.from('obras').update({ status: novo }).eq('id', id)
+    const patch = { status: novo }
+    // data_conclusao é a base dos KPIs de entrega no prazo e lead time
+    if (novo === 'concluida' && !obra?.data_conclusao) patch.data_conclusao = new Date().toISOString().slice(0, 10)
+    if (novo === 'ativa') patch.data_conclusao = null
+    await supabase.from('obras').update(patch).eq('id', id)
+    loadData()
+  }
+
+  // ===== NPS (pesquisa pós-obra) =====
+  function abrirNps() {
+    setNpsForm({ nota: obra?.nps != null ? Number(obra.nps) : null, observacao: obra?.nps_observacao || '' })
+    setNpsModalOpen(true)
+  }
+
+  async function salvarNps(e) {
+    e?.preventDefault?.()
+    if (npsForm.nota == null) return
+    await supabase.from('obras').update({
+      nps: npsForm.nota,
+      nps_data: obra?.nps_data || new Date().toISOString().slice(0, 10),
+      nps_observacao: npsForm.observacao.trim() || null,
+      nps_por: userEmail || null,
+    }).eq('id', id)
+    setNpsModalOpen(false)
     loadData()
   }
 
@@ -515,6 +540,14 @@ export default function ObraDetalhe() {
         </div>
       )}
 
+      {/* Obra concluída sem NPS → pedir a pesquisa pós-obra */}
+      {obra.status === 'concluida' && obra.nps == null && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex-wrap">
+          <p className="text-sm text-amber-800">⭐ Obra concluída — registre o NPS do cliente (pesquisa pós-obra).</p>
+          <Btn size="sm" onClick={abrirNps}>Registrar NPS</Btn>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
         <TabBtn current={tab} value="overview" onClick={setTab} icon={LayoutGrid} label="Visão Geral" />
@@ -537,6 +570,16 @@ export default function ObraDetalhe() {
             <KpiCard label="Conclusão" value={`${pctConcluido}%`} sub={`${pecasExpedidas}/${totalPecas} peças expedidas`} cor="#10b981" />
             <KpiCard label="Itens" value={moveis.length} sub="cadastrados na obra" cor="#3b82f6" />
             <KpiCard label="Pendências" value={pendAbertas.length} sub="em aberto" cor={pendAbertas.length > 0 ? '#f59e0b' : '#10b981'} />
+            {obra.nps != null && (
+              <div onClick={abrirNps} className="cursor-pointer" title="Editar NPS">
+                <KpiCard
+                  label="NPS do cliente"
+                  value={Number(obra.nps).toLocaleString('pt-BR')}
+                  sub={`pesquisa em ${fmtData(obra.nps_data)} — clique para editar`}
+                  cor={Number(obra.nps) >= 8.5 ? '#10b981' : Number(obra.nps) >= 7 ? '#f59e0b' : '#ef4444'}
+                />
+              </div>
+            )}
           </div>
 
           {temCronograma(obra) && (
@@ -1254,6 +1297,47 @@ export default function ObraDetalhe() {
           <Btn variant="secondary" onClick={() => setAplicarTemplateOpen(false)}>Cancelar</Btn>
           <Btn onClick={aplicarTemplates}>Aplicar pendências</Btn>
         </div>
+      </Modal>
+
+      {/* MODAL: NPS do cliente (pesquisa pós-obra) */}
+      <Modal open={npsModalOpen} onClose={() => setNpsModalOpen(false)} title="NPS do cliente">
+        <form onSubmit={salvarNps} className="space-y-4">
+          <div>
+            <p className="text-sm text-gray-600 mb-2">
+              De 0 a 10, qual a chance de o cliente recomendar a Top Móveis?
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {Array.from({ length: 11 }, (_, n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setNpsForm(f => ({ ...f, nota: n }))}
+                  className={`w-10 h-10 rounded-lg border text-sm font-semibold transition-colors cursor-pointer ${
+                    npsForm.nota === n
+                      ? 'bg-primary-600 border-primary-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Observações (opcional)</label>
+            <textarea
+              value={npsForm.observacao}
+              onChange={e => setNpsForm(f => ({ ...f, observacao: e.target.value }))}
+              rows={3}
+              placeholder="Comentários do cliente, pontos de melhoria..."
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Btn type="button" variant="secondary" onClick={() => setNpsModalOpen(false)}>Cancelar</Btn>
+            <Btn type="submit" disabled={npsForm.nota == null}>Salvar NPS</Btn>
+          </div>
+        </form>
       </Modal>
     </div>
   )

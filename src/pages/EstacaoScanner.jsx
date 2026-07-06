@@ -91,11 +91,17 @@ export default function EstacaoScanner() {
     setInfo(null)
     setErroMsg('')
 
-    const { data, error } = await supabase.rpc('mover_peca_para_etapa', {
-      p_codigo: codigo,
-      p_etapa: estacao.etapa,
-      p_estacao: `estacao-${estacao.slug}`,
-    })
+    // Estação de Retrabalho registra o evento (KPI) e devolve a peça ao Romaneio
+    const { data, error } = estacao.retrabalho
+      ? await supabase.rpc('registrar_retrabalho', {
+          p_codigo: codigo,
+          p_estacao: `estacao-${estacao.slug}`,
+        })
+      : await supabase.rpc('mover_peca_para_etapa', {
+          p_codigo: codigo,
+          p_etapa: estacao.etapa,
+          p_estacao: `estacao-${estacao.slug}`,
+        })
 
     if (error) {
       setStatus('error')
@@ -192,7 +198,11 @@ export default function EstacaoScanner() {
             <Check size={120} strokeWidth={3} />
             <div className="text-3xl font-bold mt-4 font-mono">{info.codigo}</div>
             <div className="text-lg opacity-90 mt-1 px-6 text-center">{info.nome}</div>
-            {info.sem_mudanca ? (
+            {estacao.retrabalho ? (
+              <div className="mt-3 text-sm bg-white/20 px-3 py-1 rounded-full">
+                Retrabalho registrado — peça volta para Romaneio
+              </div>
+            ) : info.sem_mudanca ? (
               <div className="mt-3 text-sm bg-white/20 px-3 py-1 rounded-full">
                 Já estava em {estacao.label}
               </div>
@@ -229,7 +239,7 @@ export default function EstacaoScanner() {
           <Camera size={16} className="text-gray-400" />
           <span className="text-gray-300">Aponte para o QR Code da peça</span>
         </div>
-        {undoTimer > 0 && info && !info.sem_mudanca && (
+        {undoTimer > 0 && info && !info.sem_mudanca && !estacao.retrabalho && (
           <button
             onClick={handleUndo}
             className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm font-medium cursor-pointer"
