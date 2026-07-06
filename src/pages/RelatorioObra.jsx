@@ -245,7 +245,7 @@ export default function RelatorioObra() {
 
         {/* Footer */}
         <div style={{ marginTop: '14px', paddingTop: '8px', borderTop: '1px solid #e5e7eb', fontSize: '7.5pt', color: '#9ca3af', textAlign: 'center' }}>
-          Romaneio Pro · Gerado em {new Date().toLocaleString('pt-BR')} · Top Móveis
+          TMObras · Gerado em {new Date().toLocaleString('pt-BR')} · Top Móveis
         </div>
       </div>
 

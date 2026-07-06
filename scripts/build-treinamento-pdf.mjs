@@ -32,7 +32,7 @@ const bodyWithIds = body.replace(
 )
 
 const html = `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>Romaneio Pro — Treinamento</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>TMObras — Treinamento</title>
 <style>
   @page { size: A4; margin: 16mm 15mm 18mm; }
   * { box-sizing: border-box; }

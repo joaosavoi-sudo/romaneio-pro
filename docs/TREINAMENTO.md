@@ -1,6 +1,6 @@
-# Romaneio Pro — Guia de Treinamento
+# TMObras — Guia de Treinamento
 
-Bem-vindo ao **Romaneio Pro**, o sistema de gestão de obras de marcenaria — do contrato à
+Bem-vindo ao **TMObras** (antigo Romaneio Pro), o sistema de gestão de produção e obras da Top Móveis — do contrato à
 entrega final (e ao pós-venda). Este é o **guia de uso da equipe**: leia a sua parte
 conforme o seu papel.
 
@@ -48,7 +48,7 @@ conforme o seu papel.
 
 ## 1. Visão geral
 
-O Romaneio Pro organiza o trabalho em **três níveis** e **dois acompanhamentos** paralelos.
+O TMObras organiza o trabalho em **três níveis** e **dois acompanhamentos** paralelos.
 
 **Os três níveis:**
 - **Obra** → o contrato de um cliente (ex.: "695‑2025 — PJS Legacy Capital").

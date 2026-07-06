@@ -31,7 +31,7 @@ export default function QRLabel({ peca, obra, movel, forPrint = false }) {
           fontSize: forPrint ? '7pt' : '11px', color: '#059669',
           fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
         }}>
-          Romaneio Pro · Entrega
+          TMObras · Entrega
         </div>
         <div style={{
           fontSize: forPrint ? '14pt' : '22px', fontWeight: 700, color: '#111827',

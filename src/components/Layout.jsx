@@ -63,7 +63,7 @@ export default function Layout({ children, user }) {
         <div className="px-6 py-5 border-b border-gray-100">
           <h1 className="text-xl font-bold text-primary-700 flex items-center gap-2">
             <ClipboardList size={24} />
-            Romaneio Pro
+            TMObras
           </h1>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">
@@ -87,7 +87,7 @@ export default function Layout({ children, user }) {
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40 px-4 py-3 flex items-center justify-between">
         <h1 className="text-lg font-bold text-primary-700 flex items-center gap-2">
           <ClipboardList size={20} />
-          Romaneio Pro
+          TMObras
         </h1>
         <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 cursor-pointer">
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -102,7 +102,7 @@ export default function Layout({ children, user }) {
             <div className="px-6 py-5 border-b border-gray-100">
               <h1 className="text-xl font-bold text-primary-700 flex items-center gap-2">
                 <ClipboardList size={24} />
-                Romaneio Pro
+                TMObras
               </h1>
             </div>
             <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">

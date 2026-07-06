@@ -51,7 +51,7 @@ export default function Backup() {
 
       const hoje = new Date().toISOString().slice(0, 10)
       const backup = {
-        sistema: 'romaneio-pro',
+        sistema: 'tmobras',
         gerado_em: new Date().toISOString(),
         tabelas: dados,
       }
@@ -59,7 +59,7 @@ export default function Backup() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `romaneio-pro-backup-${hoje}.json`
+      a.download = `tmobras-backup-${hoje}.json`
       a.click()
       URL.revokeObjectURL(url)
 
