@@ -65,7 +65,7 @@ export default function Layout({ children, user }) {
             Romaneio Pro
           </h1>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">
           {NAV.map(item => <SidebarLink key={item.to} {...item} />)}
         </nav>
         <div className="px-3 py-4 border-t border-gray-100">
@@ -104,7 +104,7 @@ export default function Layout({ children, user }) {
                 Romaneio Pro
               </h1>
             </div>
-            <nav className="flex-1 px-3 py-4 space-y-1">
+            <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">
               {NAV.map(item => (
                 <SidebarLink key={item.to} {...item} onClick={() => setMobileOpen(false)} />
               ))}
