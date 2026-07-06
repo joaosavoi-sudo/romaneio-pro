@@ -23,6 +23,21 @@ export function fmtMes(ano, mes) {
 
 const dentro = (data, p) => !!data && data >= p.inicio && data <= p.fim
 const dataDe = ts => (ts ? String(ts).slice(0, 10) : null) // timestamptz → yyyy-mm-dd
+const addDiasIso = (s, n) => {
+  const d = new Date(s)
+  d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+// Datas (yyyy-mm-dd, ordenadas) em que itens do checklist de uma etapa do
+// processo foram marcados — obras.checklist = { etapa: { key: { ok, por, em } } }
+function datasChecklist(obra, etapaId) {
+  const itens = obra?.checklist?.[etapaId] || {}
+  return Object.values(itens)
+    .filter(i => i?.ok && i?.em)
+    .map(i => String(i.em).slice(0, 10))
+    .sort()
+}
 
 // maiorMelhor: verde se valor >= meta; senão verde se valor <= meta
 function farol(valor, meta, maiorMelhor = true) {
@@ -99,30 +114,21 @@ export function kpiRetrabalho(retrabalhos, pecaHistorico, periodo) {
 }
 
 // ===== KPI 3: pendências pós-montagem (meta ≤3 por obra) =====
-// Obras montadas no período = com algum item com data_montagem_concluida no mês.
-// Conta as pendências da obra criadas a partir do início da montagem.
-export function kpiPendenciasPosMontagem(obras, moveis, pendencias, periodo) {
-  const movPorObra = {}
-  moveis.forEach(m => {
-    if (!m.obra_id) return
-    if (!movPorObra[m.obra_id]) movPorObra[m.obra_id] = []
-    movPorObra[m.obra_id].push(m)
-  })
-
-  const montadas = obras.filter(o =>
-    (movPorObra[o.id] || []).some(m => dentro(m.data_montagem_concluida, periodo))
-  )
+// Obras montadas no período = concluídas no mês (data_conclusao). Início da
+// montagem = 1ª marcação do checklist da etapa 'montagem'; sem checklist,
+// janela de 30 dias antes da conclusão.
+export function kpiPendenciasPosMontagem(obras, pendencias, periodo) {
+  const montadas = obras.filter(o => dentro(o.data_conclusao, periodo))
   const detalhes = []
   let totalPend = 0
   montadas.forEach(o => {
-    const inicios = (movPorObra[o.id] || []).map(m => m.data_inicio_montagem).filter(Boolean).sort()
-    const inicioMontagem = inicios[0] || null
+    const marcas = datasChecklist(o, 'montagem')
+    const inicioMontagem = marcas[0] || addDiasIso(o.data_conclusao, -30)
     const pend = pendencias.filter(p =>
-      p.obra_id === o.id &&
-      (!inicioMontagem || dataDe(p.created_at) >= inicioMontagem)
+      p.obra_id === o.id && dataDe(p.created_at) >= inicioMontagem
     )
     totalPend += pend.length
-    detalhes.push({ texto: `${o.codigo} — ${o.cliente}: ${pend.length} pendência(s) pós-montagem`, obraId: o.id })
+    detalhes.push({ texto: `${o.codigo} — ${o.cliente}: ${pend.length} pendência(s) desde ${inicioMontagem.split('-').reverse().join('/')}`, obraId: o.id })
   })
   const valor = montadas.length > 0 ? totalPend / montadas.length : null
   return {
@@ -132,7 +138,7 @@ export function kpiPendenciasPosMontagem(obras, moveis, pendencias, periodo) {
     valorFmt: valor == null ? '—' : `${num(valor)} por obra`,
     metaFmt: '≤ 3 por obra',
     status: farol(valor, 3, false),
-    resumo: montadas.length > 0 ? `${totalPend} pendência(s) em ${montadas.length} obra(s) montada(s)` : 'Nenhuma montagem concluída no mês',
+    resumo: montadas.length > 0 ? `${totalPend} pendência(s) em ${montadas.length} obra(s) concluída(s)` : 'Nenhuma obra concluída no mês',
     detalhes,
   }
 }
@@ -159,18 +165,22 @@ export function kpiNps(obras, periodo) {
 }
 
 // ===== KPI 5: lead time médio medição → entrega (baseline, sem meta) =====
-export function kpiLeadTime(obras, moveis, periodo) {
-  const medicaoPorObra = {}
-  moveis.forEach(m => {
-    if (!m.obra_id || !m.data_medicao) return
-    if (!medicaoPorObra[m.obra_id] || m.data_medicao < medicaoPorObra[m.obra_id]) {
-      medicaoPorObra[m.obra_id] = m.data_medicao
-    }
+// Data de medição = última marcação do checklist da etapa 'medicao';
+// fallback = primeiro contato registrado com momento 'medicao'.
+export function kpiLeadTime(obras, contatos, periodo) {
+  const medicaoContato = {}
+  contatos.forEach(c => {
+    if (c.momento !== 'medicao' || !c.data) return
+    if (!medicaoContato[c.obra_id] || c.data < medicaoContato[c.obra_id]) medicaoContato[c.obra_id] = c.data
   })
+  const dataMedicao = o => {
+    const marcas = datasChecklist(o, 'medicao')
+    return (marcas.length ? marcas[marcas.length - 1] : null) || medicaoContato[o.id] || null
+  }
   const concluidas = obras.filter(o => dentro(o.data_conclusao, periodo))
-  const comMedicao = concluidas.filter(o => medicaoPorObra[o.id])
+  const comMedicao = concluidas.filter(o => dataMedicao(o))
   const dias = comMedicao.map(o =>
-    Math.round((new Date(o.data_conclusao) - new Date(medicaoPorObra[o.id])) / 86400000)
+    Math.round((new Date(o.data_conclusao) - new Date(dataMedicao(o))) / 86400000)
   )
   const valor = dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null
   return {
@@ -182,7 +192,7 @@ export function kpiLeadTime(obras, moveis, periodo) {
     status: valor == null ? 'cinza' : 'neutro',
     resumo: comMedicao.length > 0
       ? `${comMedicao.length} obra(s) no cálculo`
-      : (concluidas.length > 0 ? 'Obras concluídas sem data de medição nos itens' : 'Nenhuma entrega no mês'),
+      : (concluidas.length > 0 ? 'Obras concluídas sem medição rastreável (checklist/contato)' : 'Nenhuma entrega no mês'),
     detalhes: comMedicao.map((o, i) => ({ texto: `${o.codigo} — ${o.cliente}: ${dias[i]} dias`, obraId: o.id })),
   }
 }
@@ -248,13 +258,13 @@ export function kpiMaterial() {
 }
 
 // Calcula os 7 KPIs de uma vez para um período.
-export function calcularKpis({ obras, moveis, retrabalhos, pecaHistorico, pendencias, contatos }, periodo) {
+export function calcularKpis({ obras, retrabalhos, pecaHistorico, pendencias, contatos }, periodo) {
   return [
     kpiEntregasNoPrazo(obras, periodo),
     kpiRetrabalho(retrabalhos, pecaHistorico, periodo),
-    kpiPendenciasPosMontagem(obras, moveis, pendencias, periodo),
+    kpiPendenciasPosMontagem(obras, pendencias, periodo),
     kpiNps(obras, periodo),
-    kpiLeadTime(obras, moveis, periodo),
+    kpiLeadTime(obras, contatos, periodo),
     kpiAderenciaFeedback(obras, contatos, periodo),
     kpiMaterial(),
   ]

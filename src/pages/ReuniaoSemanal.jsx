@@ -33,8 +33,8 @@ export default function ReuniaoSemanal() {
     try {
       const [obrasRes, moveisRes, pecasRes, pendRes, ajustesRes, reunioesRes] = await Promise.all([
         supabase.from('obras').select('id, codigo, cliente, status, etapa_atual, checklist, data_entrega_prometida'),
-        supabase.from('moveis').select('id, obra_id, codigo, responsavel, responsavel_producao, motivo_bloqueio, status_pos_expedicao, previsao_entrega, data_inicio_producao, data_inicio_montagem'),
-        supabase.from('pecas').select('id, etapa, movel_id').not('movel_id', 'is', null),
+        supabase.from('moveis').select('id, obra_id, codigo, responsavel, motivo_bloqueio, status_pos_expedicao, previsao_entrega'),
+        supabase.from('pecas').select('id, etapa, movel_id, created_at').not('movel_id', 'is', null),
         supabase.from('pendencias').select('id, obra_id, tipo, titulo, status, prazo, created_at'),
         supabase.from('obra_prazo_ajustes').select('id, obra_id, dias_delta, justificativa, created_at'),
         supabase.from('reunioes').select('*').eq('tipo', 'semanal').order('data', { ascending: false }).limit(12),

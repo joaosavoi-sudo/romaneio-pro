@@ -36,18 +36,16 @@ export default function Kpis() {
       // histórico e retrabalhos só do intervalo analisado (mês atual + anterior)
       const de = periodoAnterior.inicio
       const ate = `${periodo.fim}T23:59:59`
-      const [obrasRes, moveisRes, retrabRes, pendRes, contatosRes, histRes] = await Promise.all([
-        supabase.from('obras').select('id, codigo, cliente, status, created_at, data_conclusao, data_entrega_prometida, data_inicio, prazo_dias, nps, nps_data'),
-        supabase.from('moveis').select('id, obra_id, data_medicao, data_inicio_montagem, data_montagem_concluida'),
+      const [obrasRes, retrabRes, pendRes, contatosRes, histRes] = await Promise.all([
+        supabase.from('obras').select('id, codigo, cliente, status, created_at, data_conclusao, data_entrega_prometida, data_inicio, prazo_dias, nps, nps_data, checklist'),
         supabase.from('retrabalhos').select('*').gte('data', de).lte('data', periodo.fim),
         supabase.from('pendencias').select('id, obra_id, created_at, status, titulo'),
-        supabase.from('obra_contatos').select('obra_id, data'),
+        supabase.from('obra_contatos').select('obra_id, data, momento'),
         supabase.from('peca_historico').select('peca_id, created_at').gte('created_at', de).lte('created_at', ate),
       ])
-      checarErros(obrasRes, moveisRes, retrabRes, pendRes, contatosRes, histRes)
+      checarErros(obrasRes, retrabRes, pendRes, contatosRes, histRes)
       setDados({
         obras: obrasRes.data || [],
-        moveis: moveisRes.data || [],
         retrabalhos: retrabRes.data || [],
         pendencias: pendRes.data || [],
         contatos: contatosRes.data || [],

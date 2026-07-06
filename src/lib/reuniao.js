@@ -67,14 +67,23 @@ export function montarPauta({ obras, moveis, pecas, pendencias, prazoAjustes }, 
     return porObra
   }
 
-  // 1. Entrada em produção: itens com data_inicio_producao na semana +
-  //    obras em medição com o gate quase completo (candidatas)
+  // 1. Entrada em produção: obras cuja primeira peça nasceu na semana
+  //    (romaneio criado = produção começando) + obras em medição com o
+  //    gate quase completo (candidatas a entrar)
   const linhas1 = []
-  Object.entries(agrupar(moveisAtivos.filter(m => dentro(m.data_inicio_producao, semana)))).forEach(([obraId, ms]) => {
-    linhas1.push({
-      texto: `${rotulo(obraDe[obraId])}: ${ms.length} item(ns) iniciam produção (${ms.map(m => m.codigo).join(', ')})`,
-      obraId,
-    })
+  const movelObra = Object.fromEntries(moveis.map(m => [m.id, m.obra_id]))
+  const primeiraPecaPorObra = {}
+  pecas.forEach(p => {
+    const obraId = movelObra[p.movel_id]
+    if (!obraId) return
+    const d = String(p.created_at || '').slice(0, 10)
+    if (!primeiraPecaPorObra[obraId] || d < primeiraPecaPorObra[obraId]) primeiraPecaPorObra[obraId] = d
+  })
+  ativas.forEach(o => {
+    const inicio = primeiraPecaPorObra[o.id]
+    if (inicio && dentro(inicio, semana)) {
+      linhas1.push({ texto: `${rotulo(o)}: produção iniciada na semana (primeiras peças em ${fmtDia(inicio)})`, obraId: o.id })
+    }
   })
   ativas.forEach(o => {
     if (etapaAtual(o) !== 'medicao') return
@@ -92,8 +101,8 @@ export function montarPauta({ obras, moveis, pecas, pendencias, prazoAjustes }, 
       obraId,
     })
   })
-  Object.entries(agrupar(moveisAtivos.filter(m => dentro(m.data_inicio_montagem, semana)))).forEach(([obraId, ms]) => {
-    linhas2.push({ texto: `${rotulo(obraDe[obraId])}: montagem de ${ms.length} item(ns) começa na semana`, obraId })
+  Object.entries(agrupar(moveisAtivos.filter(m => m.status_pos_expedicao === 'em_montagem'))).forEach(([obraId, ms]) => {
+    linhas2.push({ texto: `${rotulo(obraDe[obraId])}: ${ms.length} item(ns) em montagem no momento`, obraId })
   })
   ativas.filter(o => dentro(o.data_entrega_prometida, semana)).forEach(o => {
     linhas2.push({ texto: `${rotulo(o)}: entrega da obra prometida para ${fmtDia(o.data_entrega_prometida)}`, obraId: o.id, cor: '#f59e0b' })
@@ -152,7 +161,7 @@ export function montarPauta({ obras, moveis, pecas, pendencias, prazoAjustes }, 
   })
   const porResp = {}
   emProducao.forEach(m => {
-    const r = m.responsavel_producao || m.responsavel || 'Sem responsável'
+    const r = m.responsavel || 'Sem responsável'
     porResp[r] = (porResp[r] || 0) + 1
   })
   Object.entries(porResp).sort((a, b) => b[1] - a[1]).forEach(([resp, n]) => {
