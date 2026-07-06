@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Printer, FileBarChart } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import { ETAPAS, ETAPA_MAP } from '../lib/constants'
-import { Btn, Card, CardBody, Select } from '../components/ui'
+import { Btn, Card, CardBody, Select, ErroCarga } from '../components/ui'
 
 export default function Relatorio() {
   const [obras, setObras] = useState([])
   const [obraId, setObraId] = useState('')
   const [pecas, setPecas] = useState([])
   const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState(null)
 
   useEffect(() => {
     supabase.from('obras').select('id, codigo, cliente').order('codigo')
@@ -17,18 +18,27 @@ export default function Relatorio() {
 
   useEffect(() => { loadPecas() }, [obraId])
 
+  // Relatório é gerado por obra (evita baixar todas as peças do banco de uma vez)
   async function loadPecas() {
+    if (!obraId) {
+      setPecas([])
+      return
+    }
+    setErro(null)
     setLoading(true)
-    let query = supabase
-      .from('pecas')
-      .select('*, romaneios(codigo, obra_id, obras(codigo, cliente)), moveis(codigo, nome, ambiente)')
-      .order('codigo')
-
-    const { data } = await query
-    let result = data || []
-    if (obraId) result = result.filter(p => p.romaneios?.obra_id === obraId)
-    setPecas(result)
-    setLoading(false)
+    try {
+      const res = await supabase
+        .from('pecas')
+        .select('*, romaneios!inner(codigo, obra_id, obras(codigo, cliente)), moveis(codigo, nome, ambiente)')
+        .eq('romaneios.obra_id', obraId)
+        .order('codigo')
+      checarErros(res)
+      setPecas(res.data || [])
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const obraSelecionada = obras.find(o => o.id === obraId)
@@ -59,7 +69,7 @@ export default function Relatorio() {
             label="Obra"
             value={obraId}
             onChange={e => setObraId(e.target.value)}
-            placeholder="Todas as obras"
+            placeholder="Selecione uma obra..."
             options={obras.map(o => ({ value: o.id, label: `${o.codigo} — ${o.cliente}` }))}
           />
         </CardBody>
@@ -78,7 +88,7 @@ export default function Relatorio() {
               <div style={{ fontSize: '11pt', color: '#374151', marginTop: '4px' }}>
                 {obraSelecionada
                   ? <>Obra <strong>{obraSelecionada.codigo}</strong> — {obraSelecionada.cliente}</>
-                  : 'Todas as obras'}
+                  : 'Selecione uma obra'}
               </div>
             </div>
             <div style={{ textAlign: 'right', fontSize: '9pt', color: '#6b7280' }}>
@@ -110,8 +120,14 @@ export default function Relatorio() {
         </div>
 
         {/* Listas por etapa */}
-        {loading ? (
+        {erro ? (
+          <ErroCarga mensagem={erro} onRetry={loadPecas} />
+        ) : loading ? (
           <p style={{ textAlign: 'center', color: '#6b7280' }}>Carregando...</p>
+        ) : !obraId ? (
+          <p style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
+            Selecione uma obra acima para gerar o relatório
+          </p>
         ) : pecas.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
             Nenhuma peça encontrada
