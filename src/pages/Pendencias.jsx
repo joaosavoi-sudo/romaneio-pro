@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, Search, Building2, Check } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import { diasAte } from '../lib/itemStatus'
 import { TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP, STATUS_PENDENCIA_MAP } from '../lib/templates'
-import { Btn, Card, CardBody, Select, Badge, Modal } from '../components/ui'
+import { Btn, Card, CardBody, Select, Badge, Modal, ErroCarga } from '../components/ui'
 import ResponsavelInput from '../components/ResponsavelInput'
 
 export default function Pendencias() {
@@ -12,6 +12,7 @@ export default function Pendencias() {
   const [searchParams] = useSearchParams()
   const [pendencias, setPendencias] = useState([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
 
   // Filtros
   const [filtroObra, setFiltroObra] = useState('')
@@ -35,14 +36,21 @@ export default function Pendencias() {
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email || '')) }, [])
 
   async function loadData() {
+    setErro(null)
     setLoading(true)
-    let q = supabase
-      .from('pendencias')
-      .select('*, obras(id, codigo, cliente, arquiteto, construtora), moveis(id, codigo, nome, descricao)')
-    if (filtroStatusPend !== 'todas') q = q.eq('status', filtroStatusPend)
-    const { data } = await q.order('created_at', { ascending: false })
-    setPendencias(data || [])
-    setLoading(false)
+    try {
+      let q = supabase
+        .from('pendencias')
+        .select('*, obras(id, codigo, cliente, arquiteto, construtora), moveis(id, codigo, nome, descricao)')
+      if (filtroStatusPend !== 'todas') q = q.eq('status', filtroStatusPend)
+      const res = await q.order('created_at', { ascending: false })
+      checarErros(res)
+      setPendencias(res.data || [])
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function abrirResolver(p, e) {
@@ -122,6 +130,7 @@ export default function Pendencias() {
   }
 
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
+  if (erro) return <ErroCarga mensagem={erro} onRetry={loadData} />
 
   return (
     <div>

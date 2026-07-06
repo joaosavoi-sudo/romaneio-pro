@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Search, Package, Filter } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import { ETAPAS, MATERIAIS } from '../lib/constants'
-import { Card, CardBody, Select } from '../components/ui'
+import { Card, CardBody, Select, ErroCarga } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 
 export default function Pecas() {
   const [pecas, setPecas] = useState([])
   const [obras, setObras] = useState([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
   const [search, setSearch] = useState('')
   const [filtroEtapa, setFiltroEtapa] = useState('')
   const [filtroObra, setFiltroObra] = useState('')
@@ -17,13 +18,21 @@ export default function Pecas() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
-    const [pecasRes, obrasRes] = await Promise.all([
-      supabase.from('pecas').select('*, romaneios(codigo, obras(id, codigo, cliente))').order('created_at', { ascending: false }),
-      supabase.from('obras').select('id, codigo, cliente').order('codigo'),
-    ])
-    setPecas(pecasRes.data || [])
-    setObras(obrasRes.data || [])
-    setLoading(false)
+    setErro(null)
+    setLoading(true)
+    try {
+      const [pecasRes, obrasRes] = await Promise.all([
+        supabase.from('pecas').select('*, romaneios(codigo, obras(id, codigo, cliente))').order('created_at', { ascending: false }),
+        supabase.from('obras').select('id, codigo, cliente').order('codigo'),
+      ])
+      checarErros(pecasRes, obrasRes)
+      setPecas(pecasRes.data || [])
+      setObras(obrasRes.data || [])
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filtered = pecas.filter(p => {
@@ -80,7 +89,9 @@ export default function Pecas() {
       </Card>
 
       {/* Tabela */}
-      {loading ? (
+      {erro ? (
+        <ErroCarga mensagem={erro} onRetry={loadData} />
+      ) : loading ? (
         <p className="text-center text-gray-500 py-12">Carregando...</p>
       ) : filtered.length === 0 ? (
         <Card>

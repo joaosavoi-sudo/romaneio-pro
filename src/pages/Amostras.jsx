@@ -1,19 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Palette, Search } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import {
   TIPOS_AMOSTRA, TIPO_AMOSTRA_MAP, STATUS_AMOSTRA, STATUS_AMOSTRA_MAP,
   amostraAtrasada, amostraEmAberto,
 } from '../lib/amostras'
 import { fmtData } from '../lib/cronograma'
-import { Card, CardBody, Select, Badge } from '../components/ui'
+import { Card, CardBody, Select, Badge, ErroCarga } from '../components/ui'
 import ResponsavelInput from '../components/ResponsavelInput'
 
 export default function Amostras() {
   const navigate = useNavigate()
   const [amostras, setAmostras] = useState([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
 
   const [foco, setFoco] = useState('') // '' | aberto | vencidas | aprovadas
   const [filtroObra, setFiltroObra] = useState('')
@@ -24,12 +25,17 @@ export default function Amostras() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
+    setErro(null)
+    setLoading(true)
     try {
-      const { data } = await supabase
+      const res = await supabase
         .from('amostras')
         .select('*, obras(id, codigo, cliente), amostra_itens(moveis(codigo))')
         .order('created_at', { ascending: false })
-      setAmostras(data || [])
+      checarErros(res)
+      setAmostras(res.data || [])
+    } catch (e) {
+      setErro(e.message)
     } finally {
       setLoading(false)
     }
@@ -66,6 +72,7 @@ export default function Amostras() {
   }, [amostras, foco, filtroObra, filtroTipo, filtroResp, busca])
 
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
+  if (erro) return <ErroCarga mensagem={erro} onRetry={loadData} />
 
   return (
     <div>

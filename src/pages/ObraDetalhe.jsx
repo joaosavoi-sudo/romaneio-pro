@@ -5,7 +5,7 @@ import {
   AlertCircle, Calendar, Paperclip, FileBarChart, LayoutGrid,
   ListChecks, Search, CheckCircle2, RotateCcw, GitBranch, MessageCircle, Palette, Wrench,
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, OBRA_STATUS } from '../lib/constants'
 import {
   PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
@@ -13,7 +13,7 @@ import {
 } from '../lib/templates'
 import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
 import { getFases, calcFases, temCronograma, dataEntregaDerivada, fmtData, cronogramaEfetivo, calcRealizado } from '../lib/cronograma'
-import { Btn, Input, Select, Card, CardBody, Badge, Modal } from '../components/ui'
+import { Btn, Input, Select, Card, CardBody, Badge, Modal, ErroCarga } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 import AnexosObra from '../components/AnexosObra'
 import CronogramaBar from '../components/CronogramaBar'
@@ -71,6 +71,7 @@ export default function ObraDetalhe() {
   const [amostrasItem, setAmostrasItem] = useState([])
   const [userEmail, setUserEmail] = useState('')
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
 
   const [tab, setTab] = useState('overview')
 
@@ -137,6 +138,7 @@ export default function ObraDetalhe() {
   }, [moveis, searchParams])
 
   async function loadData() {
+    setErro(null)
     try {
       const [obraRes, romRes, movRes, pendRes, ajustesRes] = await Promise.all([
         supabase.from('obras').select('*').eq('id', id).single(),
@@ -145,6 +147,8 @@ export default function ObraDetalhe() {
         supabase.from('pendencias').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
         supabase.from('obra_prazo_ajustes').select('*').eq('obra_id', id).order('created_at', { ascending: false }),
       ])
+      // obraRes.error de "não encontrada" (single) cai no "Obra não encontrada" abaixo
+      checarErros(romRes, movRes, pendRes, ajustesRes)
       setObra(obraRes.data)
       setRomaneios(romRes.data || [])
       setMoveis(movRes.data || [])
@@ -154,14 +158,17 @@ export default function ObraDetalhe() {
       // Histórico das peças da obra → base do "realizado" no cronograma
       const pecaIds = (romRes.data || []).flatMap(r => (r.pecas || []).map(p => p.id))
       if (pecaIds.length > 0) {
-        const { data: hist } = await supabase
+        const histRes = await supabase
           .from('peca_historico')
           .select('peca_id, etapa_nova, created_at')
           .in('peca_id', pecaIds)
-        setPecaHistorico(hist || [])
+        checarErros(histRes)
+        setPecaHistorico(histRes.data || [])
       } else {
         setPecaHistorico([])
       }
+    } catch (e) {
+      setErro(e.message)
     } finally {
       setLoading(false)
     }
@@ -441,6 +448,7 @@ export default function ObraDetalhe() {
 
   // ===== Renderização =====
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
+  if (erro) return <ErroCarga mensagem={erro} onRetry={loadData} />
   if (!obra) return <p className="text-center text-red-500 py-12">Obra não encontrada</p>
 
   const pendAbertas = pendencias.filter(p => p.status === 'aberta')

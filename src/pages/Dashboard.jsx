@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Building2, Package, ScanLine, AlertTriangle, CalendarClock, Ban, MessageCircle, Wrench } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import { ETAPAS, SEMAFORO } from '../lib/constants'
 import { OBRA_ETAPAS, etapaAtual } from '../lib/processo'
 import { INTERVALO_CONTATO_DIAS, diasDesde } from '../lib/comunicacao'
 import { assistenciaAtrasada } from '../lib/assistencias'
 import { calcularEtapaItem, calcularSemaforo, diasAte } from '../lib/itemStatus'
-import { Card, CardBody } from '../components/ui'
+import { Card, CardBody, ErroCarga } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 
 function StatCard({ icon: Icon, label, value, color, onClick }) {
@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [obrasPorEtapa, setObrasPorEtapa] = useState({})
   const [obrasAComunicar, setObrasAComunicar] = useState(0)
   const [assist, setAssist] = useState({ atrasadas: 0, cobrar: 0 })
+  const [erro, setErro] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -47,6 +48,8 @@ export default function Dashboard() {
   }, [])
 
   async function loadStats() {
+    setErro(null)
+    try {
     const [obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes, contatosRes, assistRes] = await Promise.all([
       supabase.from('obras').select('id, etapa_atual, created_at').eq('status', 'ativa'),
       supabase.from('pecas').select('id, etapa, movel_id'),
@@ -57,6 +60,7 @@ export default function Dashboard() {
       supabase.from('obra_contatos').select('obra_id, data'),
       supabase.from('assistencias').select('status, em_garantia, prazo_agendar, data_agendada, prazo_concluir'),
     ])
+    checarErros(obrasRes, pecasRes, romaneiosRes, historicoRes, moveisRes, pendRes, contatosRes, assistRes)
 
     setStats({
       obras: obrasRes.data?.length || 0,
@@ -113,6 +117,9 @@ export default function Dashboard() {
     setPecasPorMovel(idxPecas)
     setPendenciasPorMovel(idxPend)
     setHistorico(historicoRes.data || [])
+    } catch (e) {
+      setErro(e.message)
+    }
   }
 
   // Itens ativos (de obras ativas) com semáforo, etapa e prazo calculados
@@ -176,6 +183,8 @@ export default function Dashboard() {
         <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
         <p className="text-sm text-gray-500">Visão geral das obras ativas</p>
       </div>
+
+      {erro && <ErroCarga mensagem={erro} onRetry={loadStats} />}
 
       {/* Alerta: obras a comunicar com o cliente */}
       {obrasAComunicar > 0 && (

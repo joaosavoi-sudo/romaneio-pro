@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ListChecks, Search, Download, Building2 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import { SEMAFORO } from '../lib/constants'
 import { calcularEtapaItem, calcularSemaforo } from '../lib/itemStatus'
-import { Btn, Card, CardBody, Select } from '../components/ui'
+import { Btn, Card, CardBody, Select, ErroCarga } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 import ResponsavelInput from '../components/ResponsavelInput'
 
@@ -15,6 +15,7 @@ export default function Itens() {
   const [pecasPorMovel, setPecasPorMovel] = useState({})
   const [pendenciasPorMovel, setPendenciasPorMovel] = useState({})
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
 
   // Filtros
   const [filtroObra, setFiltroObra] = useState('')
@@ -30,37 +31,45 @@ export default function Itens() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
-    const { data: movRes } = await supabase
-      .from('moveis')
-      .select('*, obras(id, codigo, cliente, arquiteto, construtora, status)')
-      .order('codigo', { ascending: true })
+    setErro(null)
+    setLoading(true)
+    try {
+      const [movRes, pecasRes, pendRes] = await Promise.all([
+        supabase
+          .from('moveis')
+          .select('*, obras(id, codigo, cliente, arquiteto, construtora, status)')
+          .order('codigo', { ascending: true }),
+        supabase
+          .from('pecas')
+          .select('id, etapa, movel_id')
+          .not('movel_id', 'is', null),
+        supabase
+          .from('pendencias')
+          .select('id, status, prazo, movel_id')
+          .not('movel_id', 'is', null),
+      ])
+      checarErros(movRes, pecasRes, pendRes)
 
-    const { data: pecasRes } = await supabase
-      .from('pecas')
-      .select('id, etapa, movel_id')
-      .not('movel_id', 'is', null)
+      const idxPecas = {}
+      ;(pecasRes.data || []).forEach(p => {
+        if (!idxPecas[p.movel_id]) idxPecas[p.movel_id] = []
+        idxPecas[p.movel_id].push(p)
+      })
 
-    const { data: pendRes } = await supabase
-      .from('pendencias')
-      .select('id, status, prazo, movel_id')
-      .not('movel_id', 'is', null)
+      const idxPend = {}
+      ;(pendRes.data || []).forEach(p => {
+        if (!idxPend[p.movel_id]) idxPend[p.movel_id] = []
+        idxPend[p.movel_id].push(p)
+      })
 
-    const idxPecas = {}
-    ;(pecasRes || []).forEach(p => {
-      if (!idxPecas[p.movel_id]) idxPecas[p.movel_id] = []
-      idxPecas[p.movel_id].push(p)
-    })
-
-    const idxPend = {}
-    ;(pendRes || []).forEach(p => {
-      if (!idxPend[p.movel_id]) idxPend[p.movel_id] = []
-      idxPend[p.movel_id].push(p)
-    })
-
-    setMoveis(movRes || [])
-    setPecasPorMovel(idxPecas)
-    setPendenciasPorMovel(idxPend)
-    setLoading(false)
+      setMoveis(movRes.data || [])
+      setPecasPorMovel(idxPecas)
+      setPendenciasPorMovel(idxPend)
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const obras = useMemo(() => {
@@ -146,6 +155,7 @@ export default function Itens() {
   }
 
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
+  if (erro) return <ErroCarga mensagem={erro} onRetry={loadData} />
 
   return (
     <div>

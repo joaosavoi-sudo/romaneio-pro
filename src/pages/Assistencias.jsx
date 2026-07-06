@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Wrench, Search, Plus } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import {
   STATUS_ASSISTENCIA_MAP, assistenciaAtrasada, assistenciaEmAberto,
 } from '../lib/assistencias'
 import { fmtData } from '../lib/cronograma'
-import { Btn, Card, CardBody, Select, Badge } from '../components/ui'
+import { Btn, Card, CardBody, Select, Badge, ErroCarga } from '../components/ui'
 import ResponsavelInput from '../components/ResponsavelInput'
 import AssistenciaFormModal from '../components/AssistenciaFormModal'
 
@@ -13,6 +13,7 @@ export default function Assistencias() {
   const [lista, setLista] = useState([])
   const [obrasAll, setObrasAll] = useState([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
 
@@ -24,13 +25,18 @@ export default function Assistencias() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
+    setErro(null)
+    setLoading(true)
     try {
-      const [{ data: assist }, { data: obs }] = await Promise.all([
+      const [assistRes, obsRes] = await Promise.all([
         supabase.from('assistencias').select('*, obras(id, codigo, cliente), moveis(codigo)').order('created_at', { ascending: false }),
         supabase.from('obras').select('id, codigo, cliente').order('codigo', { ascending: true }),
       ])
-      setLista(assist || [])
-      setObrasAll(obs || [])
+      checarErros(assistRes, obsRes)
+      setLista(assistRes.data || [])
+      setObrasAll(obsRes.data || [])
+    } catch (e) {
+      setErro(e.message)
     } finally {
       setLoading(false)
     }
@@ -68,6 +74,7 @@ export default function Assistencias() {
   }, [lista, foco, filtroObra, filtroResp, busca])
 
   if (loading) return <p className="text-center text-gray-500 py-12">Carregando...</p>
+  if (erro) return <ErroCarga mensagem={erro} onRetry={loadData} />
 
   return (
     <div>

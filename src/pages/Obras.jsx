@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Building2, ChevronRight } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, checarErros } from '../lib/supabase'
 import { OBRA_STATUS, gerarCodigo } from '../lib/constants'
 import { OBRA_ETAPA_MAP, etapaAtual } from '../lib/processo'
-import { Btn, Input, Select, Modal, Card, CardBody, Badge } from '../components/ui'
+import { Btn, Input, Select, Modal, Card, CardBody, Badge, ErroCarga } from '../components/ui'
 
 export default function Obras() {
   const [obras, setObras] = useState([])
@@ -14,17 +14,26 @@ export default function Obras() {
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({ codigo: '', cliente: '', endereco: '', arquiteto: '', status: 'ativa' })
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => { loadObras() }, [])
 
   async function loadObras() {
-    const { data } = await supabase
-      .from('obras')
-      .select('*, romaneios(id), pecas:romaneios(pecas(id))')
-      .order('created_at', { ascending: false })
-    setObras(data || [])
-    setLoading(false)
+    setErro(null)
+    setLoading(true)
+    try {
+      const res = await supabase
+        .from('obras')
+        .select('*, romaneios(id), pecas:romaneios(pecas(id))')
+        .order('created_at', { ascending: false })
+      checarErros(res)
+      setObras(res.data || [])
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleSave(e) {
@@ -115,7 +124,9 @@ export default function Obras() {
         </div>
       </div>
 
-      {loading ? (
+      {erro ? (
+        <ErroCarga mensagem={erro} onRetry={loadObras} />
+      ) : loading ? (
         <p className="text-center text-gray-500 py-12">Carregando...</p>
       ) : filtered.length === 0 ? (
         <Card>
