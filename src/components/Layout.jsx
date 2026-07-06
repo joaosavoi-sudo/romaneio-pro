@@ -61,9 +61,9 @@ export default function Layout({ children, user }) {
       {/* Sidebar desktop */}
       <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-200 fixed h-full z-30">
         <div className="px-6 py-5 border-b border-gray-100">
-          <h1 className="text-xl font-bold text-primary-700 flex items-center gap-2">
-            <ClipboardList size={24} />
-            TMObras
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <img src="/logo-tmobras.svg" alt="" className="w-7 h-7" />
+            <span><span className="text-primary-600">TM</span><span className="text-gray-900">Obras</span></span>
           </h1>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">
@@ -85,9 +85,9 @@ export default function Layout({ children, user }) {
 
       {/* Mobile header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-primary-700 flex items-center gap-2">
-          <ClipboardList size={20} />
-          TMObras
+        <h1 className="text-lg font-bold flex items-center gap-2">
+          <img src="/logo-tmobras.svg" alt="" className="w-6 h-6" />
+          <span><span className="text-primary-600">TM</span><span className="text-gray-900">Obras</span></span>
         </h1>
         <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 cursor-pointer">
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -100,9 +100,9 @@ export default function Layout({ children, user }) {
           <div className="fixed inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white flex flex-col">
             <div className="px-6 py-5 border-b border-gray-100">
-              <h1 className="text-xl font-bold text-primary-700 flex items-center gap-2">
-                <ClipboardList size={24} />
-                TMObras
+              <h1 className="text-xl font-bold flex items-center gap-2">
+                <img src="/logo-tmobras.svg" alt="" className="w-7 h-7" />
+                <span><span className="text-primary-600">TM</span><span className="text-gray-900">Obras</span></span>
               </h1>
             </div>
             <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1">

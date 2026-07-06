@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Btn, Input } from '../components/ui'
 
@@ -30,10 +29,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-2xl mb-4">
-            <ClipboardList size={32} className="text-primary-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">TMObras</h1>
+          <img src="/logo-tmobras.svg" alt="TMObras" className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold">
+            <span className="text-primary-600">TM</span><span className="text-gray-900">Obras</span>
+          </h1>
           <p className="text-sm text-gray-500 mt-1">Gestão de produção e obras · Top Móveis</p>
         </div>
 
