@@ -77,14 +77,17 @@ export default function ImportarGuia() {
       if (!file) { setErro('Selecione um arquivo'); setEstado('idle'); return }
       const text = await fileToText(file)
 
-      // Guias grandes são analisadas em partes (evita o timeout de 3 min por chamada)
+      // Guias grandes são analisadas em partes (o gargalo é o tempo de geração
+      // da resposta da IA) — até 2 partes em paralelo, com 1 retry por parte.
       const partes = dividirEmPartes(text)
-      const listasMoveis = []
-      let obraExtraida = null
+      const resultados = new Array(partes.length) // preserva a ordem das partes
+      let concluidas = 0
+      const atualizarProgresso = () => {
+        if (partes.length > 1) setProgresso(`Analisando guia — ${concluidas} de ${partes.length} partes concluídas...`)
+      }
+      atualizarProgresso()
 
-      for (const p of partes) {
-        if (partes.length > 1) setProgresso(`Analisando parte ${p.parte} de ${p.total}...`)
-
+      async function analisarParte(p, tentativa = 1) {
         const res = await fetch('/api/analyze-guia', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -95,22 +98,38 @@ export default function ImportarGuia() {
           }),
         })
         const json = await res.json()
-
         if (!json.success) {
+          if (tentativa < 2) return analisarParte(p, tentativa + 1)
           const prefixo = partes.length > 1 ? `Falha na parte ${p.parte} de ${p.total}: ` : ''
-          setErro(prefixo + (json.error || 'Erro ao analisar a guia'))
-          if (json.debug) setDebug(json.debug)
-          setEstado('idle')
-          setProgresso('')
-          return
+          const err = new Error(prefixo + (json.error || 'Erro ao analisar a guia'))
+          err.debug = json.debug
+          throw err
         }
+        resultados[p.parte - 1] = json.data
+        concluidas++
+        atualizarProgresso()
+      }
 
-        if (!obraExtraida && json.data.obra?.numero_guia) obraExtraida = json.data.obra
-        listasMoveis.push(json.data.moveis || [])
+      // Pool simples com 2 análises simultâneas
+      const fila = [...partes]
+      async function worker() {
+        while (fila.length > 0) {
+          await analisarParte(fila.shift())
+        }
+      }
+      try {
+        await Promise.all(Array.from({ length: Math.min(2, partes.length) }, worker))
+      } catch (err) {
+        setErro(err.message)
+        if (err.debug) setDebug(err.debug)
+        setEstado('idle')
+        setProgresso('')
+        return
       }
       setProgresso('')
 
-      const data = { obra: obraExtraida, moveis: mesclarMoveis(listasMoveis) }
+      const obraExtraida = resultados.find(r => r?.obra?.numero_guia)?.obra || resultados[0]?.obra || null
+      const data = { obra: obraExtraida, moveis: mesclarMoveis(resultados.map(r => r?.moveis || [])) }
       setObra({
         numero_guia: data.obra?.numero_guia || '',
         cliente: data.obra?.cliente || '',
@@ -425,7 +444,7 @@ export default function ImportarGuia() {
               <p className="font-medium mb-1">{progresso || 'Analisando documento...'}</p>
               <p className="text-xs">
                 A IA está lendo o documento e extraindo cliente, obra, arquiteto e todos os itens.
-                Guias grandes são analisadas em partes automaticamente — pode levar 1 a 2 minutos por parte.
+                Guias grandes são analisadas em várias partes automaticamente (2 por vez) — acompanhe o contador acima.
               </p>
             </div>
           )}

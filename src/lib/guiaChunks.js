@@ -25,7 +25,9 @@ function linhasLogicas(texto) {
 }
 
 // Retorna [{ conteudo, parte, total }]. Uma única parte = fluxo atual.
-export function dividirEmPartes(texto, { maxChars = 24000, headerLinhas = 20, overlapLinhas = 8 } = {}) {
+// maxChars pequeno de propósito: o gargalo é o tempo que a IA leva para
+// GERAR o JSON de resposta (~40-60s para 10k chars de entrada).
+export function dividirEmPartes(texto, { maxChars = 10000, headerLinhas = 20, overlapLinhas = 8 } = {}) {
   if (texto.length <= maxChars) {
     return [{ conteudo: texto, parte: 1, total: 1 }]
   }
