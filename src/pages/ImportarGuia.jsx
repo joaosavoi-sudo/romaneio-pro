@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, Upload, Building2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { dividirEmPartes, mesclarMoveis } from '../lib/guiaChunks'
 import { Btn, Input, Card, CardBody } from '../components/ui'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
@@ -14,6 +15,7 @@ export default function ImportarGuia() {
   const [estado, setEstado] = useState('idle') // idle | processing | review
   const [erro, setErro] = useState('')
   const [debug, setDebug] = useState(null)
+  const [progresso, setProgresso] = useState('')
 
   // input
   const [file, setFile] = useState(null)
@@ -68,28 +70,47 @@ export default function ImportarGuia() {
   async function analisar() {
     setErro('')
     setDebug(null)
+    setProgresso('')
     setEstado('processing')
 
     try {
       if (!file) { setErro('Selecione um arquivo'); setEstado('idle'); return }
       const text = await fileToText(file)
-      const body = { source: 'csv', csv_content: text }
 
-      const res = await fetch('/api/analyze-guia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const json = await res.json()
+      // Guias grandes são analisadas em partes (evita o timeout de 3 min por chamada)
+      const partes = dividirEmPartes(text)
+      const listasMoveis = []
+      let obraExtraida = null
 
-      if (!json.success) {
-        setErro(json.error || 'Erro ao analisar a guia')
-        if (json.debug) setDebug(json.debug)
-        setEstado('idle')
-        return
+      for (const p of partes) {
+        if (partes.length > 1) setProgresso(`Analisando parte ${p.parte} de ${p.total}...`)
+
+        const res = await fetch('/api/analyze-guia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'csv',
+            csv_content: p.conteudo,
+            parcial: partes.length > 1 ? { parte: p.parte, total: p.total } : undefined,
+          }),
+        })
+        const json = await res.json()
+
+        if (!json.success) {
+          const prefixo = partes.length > 1 ? `Falha na parte ${p.parte} de ${p.total}: ` : ''
+          setErro(prefixo + (json.error || 'Erro ao analisar a guia'))
+          if (json.debug) setDebug(json.debug)
+          setEstado('idle')
+          setProgresso('')
+          return
+        }
+
+        if (!obraExtraida && json.data.obra?.numero_guia) obraExtraida = json.data.obra
+        listasMoveis.push(json.data.moveis || [])
       }
+      setProgresso('')
 
-      const data = json.data
+      const data = { obra: obraExtraida, moveis: mesclarMoveis(listasMoveis) }
       setObra({
         numero_guia: data.obra?.numero_guia || '',
         cliente: data.obra?.cliente || '',
@@ -121,6 +142,7 @@ export default function ImportarGuia() {
     } catch (err) {
       setErro(err.message || 'Erro inesperado')
       setEstado('idle')
+      setProgresso('')
     }
   }
 
@@ -391,7 +413,7 @@ export default function ImportarGuia() {
               size="lg"
             >
               {estado === 'processing' ? (
-                <><Loader2 size={18} className="animate-spin" /> Analisando com IA...</>
+                <><Loader2 size={18} className="animate-spin" /> {progresso || 'Analisando com IA...'}</>
               ) : (
                 <><FileUp size={18} /> Analisar Guia</>
               )}
@@ -400,9 +422,10 @@ export default function ImportarGuia() {
 
           {estado === 'processing' && (
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-              <p className="font-medium mb-1">Analisando documento...</p>
+              <p className="font-medium mb-1">{progresso || 'Analisando documento...'}</p>
               <p className="text-xs">
-                Pode levar até 90 segundos. A IA está lendo o documento e extraindo cliente, obra, arquiteto e todos os itens.
+                A IA está lendo o documento e extraindo cliente, obra, arquiteto e todos os itens.
+                Guias grandes são analisadas em partes automaticamente — pode levar 1 a 2 minutos por parte.
               </p>
             </div>
           )}

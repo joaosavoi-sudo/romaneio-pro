@@ -123,7 +123,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { csv_content } = req.body || {}
+    const { csv_content, parcial } = req.body || {}
 
     if (!csv_content || typeof csv_content !== 'string') {
       return res.status(400).json({
@@ -132,12 +132,17 @@ export default async function handler(req, res) {
       })
     }
 
-    console.log(`[analyze-guia] Tabela recebida: ${csv_content.length} chars`)
+    // Guias grandes são analisadas em trechos (ver src/lib/guiaChunks.js)
+    const notaParcial = parcial?.parte && parcial?.total
+      ? `\n\nATENÇÃO: este é o TRECHO ${parcial.parte} de ${parcial.total} de um documento maior. O cabeçalho da obra foi repetido no início do trecho. Extraia os dados da obra normalmente e APENAS os itens que aparecem COMPLETOS neste trecho; ignore fragmentos de item sem código.`
+      : ''
+
+    console.log(`[analyze-guia] Tabela recebida: ${csv_content.length} chars${parcial ? ` (trecho ${parcial.parte}/${parcial.total})` : ''}`)
 
     const userContent = [
       {
         type: 'text',
-        text: `${AI_PROMPT_GUIA}\n\nCONTEÚDO DA TABELA:\n\n${csv_content}`,
+        text: `${AI_PROMPT_GUIA}${notaParcial}\n\nCONTEÚDO DA TABELA:\n\n${csv_content}`,
       },
     ]
 
