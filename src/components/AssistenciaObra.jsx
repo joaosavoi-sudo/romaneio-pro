@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Wrench, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Wrench, ShieldCheck, ShieldAlert, Printer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { deleteAnexoStorage } from '../lib/storage'
 import { STATUS_ASSISTENCIA, STATUS_ASSISTENCIA_MAP, assistenciaAtrasada } from '../lib/assistencias'
@@ -10,6 +11,7 @@ import AssistenciaFormModal from './AssistenciaFormModal'
 
 // Aba "Assistência" da obra. Props: obra, moveis (não usado direto; o modal carrega), onChange.
 export default function AssistenciaObra({ obra, onChange }) {
+  const navigate = useNavigate()
   const [lista, setLista] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -85,6 +87,7 @@ export default function AssistenciaObra({ obra, onChange }) {
                       {a.moveis && <p className="text-xs text-blue-600 mt-0.5">📦 {a.moveis.codigo} — {a.moveis.nome}</p>}
                     </div>
                     <div className="flex gap-1 shrink-0">
+                      <button onClick={() => navigate(`/assistencias/${a.id}/imprimir`)} title="Imprimir ordem de serviço" className="p-1 text-gray-400 hover:text-primary-600 cursor-pointer"><Printer size={14} /></button>
                       <button onClick={() => openEdit(a)} className="p-1 text-gray-400 hover:text-primary-600 cursor-pointer"><Pencil size={14} /></button>
                       <button onClick={() => excluir(a)} className="p-1 text-gray-400 hover:text-red-600 cursor-pointer"><Trash2 size={14} /></button>
                     </div>

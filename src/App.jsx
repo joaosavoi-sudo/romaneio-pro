@@ -13,6 +13,7 @@ import Pendencias from './pages/Pendencias'
 import Equipe from './pages/Equipe'
 import Amostras from './pages/Amostras'
 import Assistencias from './pages/Assistencias'
+import AssistenciaImprimir from './pages/AssistenciaImprimir'
 import RelatorioObra from './pages/RelatorioObra'
 import Pecas from './pages/Pecas'
 import Scanner from './pages/Scanner'
@@ -64,6 +65,7 @@ export default function App() {
       <Route path="/pendencias" element={<ProtectedRoute user={user}><Pendencias /></ProtectedRoute>} />
       <Route path="/amostras" element={<ProtectedRoute user={user}><Amostras /></ProtectedRoute>} />
       <Route path="/assistencias" element={<ProtectedRoute user={user}><Assistencias /></ProtectedRoute>} />
+      <Route path="/assistencias/:id/imprimir" element={<ProtectedRoute user={user}><AssistenciaImprimir /></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute user={user}><Equipe /></ProtectedRoute>} />
       <Route path="/romaneios" element={<ProtectedRoute user={user}><Romaneios /></ProtectedRoute>} />
       <Route path="/romaneio/:id" element={<ProtectedRoute user={user}><RomaneioEditor /></ProtectedRoute>} />

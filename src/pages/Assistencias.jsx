@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Wrench, Search, Plus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Wrench, Search, Plus, Printer } from 'lucide-react'
 import { supabase, checarErros } from '../lib/supabase'
 import {
   STATUS_ASSISTENCIA_MAP, assistenciaAtrasada, assistenciaEmAberto,
@@ -10,6 +11,7 @@ import ResponsavelInput from '../components/ResponsavelInput'
 import AssistenciaFormModal from '../components/AssistenciaFormModal'
 
 export default function Assistencias() {
+  const navigate = useNavigate()
   const [lista, setLista] = useState([])
   const [obrasAll, setObrasAll] = useState([])
   const [loading, setLoading] = useState(true)
@@ -128,6 +130,7 @@ export default function Assistencias() {
                   <th className="px-3 py-2.5 font-medium">Garantia</th>
                   <th className="px-3 py-2.5 font-medium">Responsável</th>
                   <th className="px-3 py-2.5 font-medium">Concluir até</th>
+                  <th className="px-3 py-2.5 font-medium">OS</th>
                 </tr>
               </thead>
               <tbody>
@@ -157,6 +160,15 @@ export default function Assistencias() {
                         <span className={atrasada ? 'text-red-600 font-medium' : 'text-gray-500'}>
                           {a.prazo_concluir ? fmtData(a.prazo_concluir) : '—'}{atrasada ? ' ⚠' : ''}
                         </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <button
+                          onClick={e => { e.stopPropagation(); navigate(`/assistencias/${a.id}/imprimir`) }}
+                          className="p-1.5 rounded hover:bg-primary-50 text-gray-400 hover:text-primary-600 cursor-pointer"
+                          title="Imprimir ordem de serviço"
+                        >
+                          <Printer size={16} />
+                        </button>
                       </td>
                     </tr>
                   )
