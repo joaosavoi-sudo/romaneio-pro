@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2, Tag, Save, Copy, Printer, Pencil, Box } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { MATERIAIS, gerarCodigo } from '../lib/constants'
+import { MATERIAIS } from '../lib/constants'
+import { gerarProximosCodigos } from '../lib/codigos'
 import { Btn, Input, Select, Card, CardBody, Modal } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 import ResponsavelInput from '../components/ResponsavelInput'
@@ -33,23 +34,26 @@ export default function RomaneioEditor() {
   useEffect(() => { loadData() }, [id])
 
   async function loadData() {
-    const { data: rom } = await supabase.from('romaneios').select('*, obras(*)').eq('id', id).single()
-    if (rom) {
-      setRomaneio(rom)
-      setObra(rom.obras)
-      setObs(rom.observacoes || '')
-      setMarceneiro(rom.marceneiro || '')
-      setResponsavel(rom.responsavel || '')
+    try {
+      const { data: rom } = await supabase.from('romaneios').select('*, obras(*)').eq('id', id).single()
+      if (rom) {
+        setRomaneio(rom)
+        setObra(rom.obras || null)
+        setObs(rom.observacoes || '')
+        setMarceneiro(rom.marceneiro || '')
+        setResponsavel(rom.responsavel || '')
 
-      // Móveis vêm da obra (não do romaneio)
-      const [pecasRes, moveisRes] = await Promise.all([
-        supabase.from('pecas').select('*, moveis(id, codigo, nome, ambiente)').eq('romaneio_id', id).order('created_at', { ascending: true }),
-        supabase.from('moveis').select('*').eq('obra_id', rom.obras.id).order('codigo', { ascending: true }),
-      ])
-      setPecas(pecasRes.data || [])
-      setMoveis(moveisRes.data || [])
+        // Móveis vêm da obra (não do romaneio)
+        const [pecasRes, moveisRes] = await Promise.all([
+          supabase.from('pecas').select('*, moveis(id, codigo, nome, ambiente)').eq('romaneio_id', id).order('created_at', { ascending: true }),
+          supabase.from('moveis').select('*').eq('obra_id', rom.obra_id).order('codigo', { ascending: true }),
+        ])
+        setPecas(pecasRes.data || [])
+        setMoveis(moveisRes.data || [])
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function handleSavePeca(e) {
@@ -58,7 +62,7 @@ export default function RomaneioEditor() {
     const movelId = pecaForm.movel_id || null
 
     if (editingPeca) {
-      await supabase.from('pecas').update({
+      const { error } = await supabase.from('pecas').update({
         nome: pecaForm.nome,
         largura: parseFloat(pecaForm.largura) || 0,
         altura: parseFloat(pecaForm.altura) || 0,
@@ -70,27 +74,35 @@ export default function RomaneioEditor() {
         movel_id: movelId,
         updated_at: new Date().toISOString(),
       }).eq('id', editingPeca.id)
+      if (error) { alert('Erro ao salvar peça: ' + error.message); return }
     } else {
-      const { count } = await supabase.from('pecas').select('id', { count: 'exact', head: true })
-      const baseCodigo = (count || 0) + 1
-      const inserts = []
-      for (let i = 0; i < qty; i++) {
-        inserts.push({
-          romaneio_id: id,
-          codigo: gerarCodigo('PC', baseCodigo + i),
-          nome: pecaForm.nome,
-          largura: parseFloat(pecaForm.largura) || 0,
-          altura: parseFloat(pecaForm.altura) || 0,
-          profundidade: parseFloat(pecaForm.profundidade) || 0,
-          material: pecaForm.material,
-          cor_acabamento: pecaForm.cor_acabamento,
-          quantidade: 1,
-          etapa: 'romaneio',
-          observacoes: pecaForm.observacoes,
-          movel_id: movelId,
-        })
+      try {
+        let tentativas = 0
+        while (true) {
+          const codigos = await gerarProximosCodigos('pecas', 'PC', qty)
+          const inserts = codigos.map(codigo => ({
+            romaneio_id: id,
+            codigo,
+            nome: pecaForm.nome,
+            largura: parseFloat(pecaForm.largura) || 0,
+            altura: parseFloat(pecaForm.altura) || 0,
+            profundidade: parseFloat(pecaForm.profundidade) || 0,
+            material: pecaForm.material,
+            cor_acabamento: pecaForm.cor_acabamento,
+            quantidade: 1,
+            etapa: 'romaneio',
+            observacoes: pecaForm.observacoes,
+            movel_id: movelId,
+          }))
+          const { error } = await supabase.from('pecas').insert(inserts)
+          if (!error) break
+          if (error.code === '23505' && tentativas === 0) { tentativas++; continue }
+          throw error
+        }
+      } catch (e) {
+        alert('Erro ao salvar peça(s): ' + e.message)
+        return
       }
-      await supabase.from('pecas').insert(inserts)
     }
     setPecaModalOpen(false)
     setEditingPeca(null)
@@ -105,22 +117,32 @@ export default function RomaneioEditor() {
   }
 
   async function duplicarPeca(peca) {
-    const { count } = await supabase.from('pecas').select('id', { count: 'exact', head: true })
-    const codigo = gerarCodigo('PC', (count || 0) + 1)
-    await supabase.from('pecas').insert({
-      romaneio_id: id,
-      codigo,
-      nome: peca.nome,
-      largura: peca.largura,
-      altura: peca.altura,
-      profundidade: peca.profundidade,
-      material: peca.material,
-      cor_acabamento: peca.cor_acabamento,
-      quantidade: 1,
-      etapa: 'romaneio',
-      observacoes: peca.observacoes,
-      movel_id: peca.movel_id,
-    })
+    try {
+      let tentativas = 0
+      while (true) {
+        const [codigo] = await gerarProximosCodigos('pecas', 'PC', 1)
+        const { error } = await supabase.from('pecas').insert({
+          romaneio_id: id,
+          codigo,
+          nome: peca.nome,
+          largura: peca.largura,
+          altura: peca.altura,
+          profundidade: peca.profundidade,
+          material: peca.material,
+          cor_acabamento: peca.cor_acabamento,
+          quantidade: 1,
+          etapa: 'romaneio',
+          observacoes: peca.observacoes,
+          movel_id: peca.movel_id,
+        })
+        if (!error) break
+        if (error.code === '23505' && tentativas === 0) { tentativas++; continue }
+        throw error
+      }
+    } catch (e) {
+      alert('Erro ao duplicar peça: ' + e.message)
+      return
+    }
     loadData()
   }
 

@@ -6,7 +6,8 @@ import {
   ListChecks, Search, CheckCircle2, RotateCcw, GitBranch, MessageCircle, Palette, Wrench,
 } from 'lucide-react'
 import { supabase, checarErros } from '../lib/supabase'
-import { gerarCodigo, SEMAFORO, STATUS_POS_EXPEDICAO, OBRA_STATUS } from '../lib/constants'
+import { SEMAFORO, STATUS_POS_EXPEDICAO, OBRA_STATUS } from '../lib/constants'
+import { criarRomaneio as criarRomaneioNaObra } from '../lib/codigos'
 import {
   PENDENCIAS_SUGERIDAS, TIPOS_PENDENCIA, TIPO_PENDENCIA_MAP,
   STATUS_PENDENCIA_MAP,
@@ -184,14 +185,9 @@ export default function ObraDetalhe() {
 
   // ===== Romaneios =====
   async function criarRomaneio() {
-    const { count } = await supabase.from('romaneios').select('id', { count: 'exact', head: true })
-    const codigo = gerarCodigo('ROM', (count || 0) + 1)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data } = await supabase.from('romaneios')
-      .insert({ codigo, obra_id: id, user_id: user.id })
-      .select()
-      .single()
-    if (data) navigate(`/romaneio/${data.id}`)
+    const { data, error } = await criarRomaneioNaObra(id)
+    if (error) { alert(error); return }
+    navigate(`/romaneio/${data.id}`)
   }
 
   async function excluirRomaneio(romId) {

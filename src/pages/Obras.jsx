@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Building2, ChevronRight } from 'lucide-react'
 import { supabase, checarErros } from '../lib/supabase'
-import { OBRA_STATUS, gerarCodigo } from '../lib/constants'
+import { OBRA_STATUS } from '../lib/constants'
+import { gerarProximosCodigos } from '../lib/codigos'
 import { OBRA_ETAPA_MAP, etapaAtual } from '../lib/processo'
 import { Btn, Input, Select, Modal, Card, CardBody, Badge, ErroCarga } from '../components/ui'
 
@@ -41,16 +42,26 @@ export default function Obras() {
     if (editing) {
       const { codigo, ...rest } = form
       const update = codigo?.trim() ? { ...rest, codigo: codigo.trim() } : rest
-      await supabase.from('obras').update(update).eq('id', editing.id)
+      const { error } = await supabase.from('obras').update(update).eq('id', editing.id)
+      if (error) { alert('Erro ao salvar obra: ' + error.message); return }
     } else {
-      let codigo = form.codigo?.trim()
-      if (!codigo) {
-        const { count } = await supabase.from('obras').select('id', { count: 'exact', head: true })
-        codigo = gerarCodigo('OBR', (count || 0) + 1)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { alert('Sua sessão expirou. Saia e entre novamente para continuar.'); return }
+        const { codigo: _, ...rest } = form
+        const codigoManual = form.codigo?.trim()
+        let tentativas = 0
+        while (true) {
+          const codigo = codigoManual || (await gerarProximosCodigos('obras', 'OBR', 1))[0]
+          const { error } = await supabase.from('obras').insert({ ...rest, codigo, user_id: user.id })
+          if (!error) break
+          if (!codigoManual && error.code === '23505' && tentativas === 0) { tentativas++; continue }
+          throw error
+        }
+      } catch (e) {
+        alert('Erro ao criar obra: ' + e.message)
+        return
       }
-      const { data: { user } } = await supabase.auth.getUser()
-      const { codigo: _, ...rest } = form
-      await supabase.from('obras').insert({ ...rest, codigo, user_id: user.id })
     }
     setModalOpen(false)
     setEditing(null)

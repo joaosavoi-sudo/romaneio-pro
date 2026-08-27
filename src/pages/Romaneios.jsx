@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, ClipboardList, Building2, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { gerarCodigo, ETAPAS } from '../lib/constants'
+import { ETAPAS } from '../lib/constants'
+import { criarRomaneio as criarRomaneioNaObra } from '../lib/codigos'
 import { Btn, Card, CardBody, Modal, Select } from '../components/ui'
 import StatusBadge from '../components/StatusBadge'
 
@@ -38,22 +39,15 @@ export default function Romaneios() {
     e.preventDefault()
     if (!novoObraId) return
     setCriando(true)
-    const { count } = await supabase.from('romaneios').select('id', { count: 'exact', head: true })
-    const codigo = gerarCodigo('ROM', (count || 0) + 1)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data, error } = await supabase
-      .from('romaneios')
-      .insert({ codigo, obra_id: novoObraId, user_id: user.id })
-      .select()
-      .single()
+    const { data, error } = await criarRomaneioNaObra(novoObraId)
     setCriando(false)
     if (error) {
-      alert('Erro ao criar romaneio: ' + error.message)
+      alert(error)
       return
     }
     setNovoModalOpen(false)
     setNovoObraId('')
-    if (data) navigate(`/romaneio/${data.id}`)
+    navigate(`/romaneio/${data.id}`)
   }
 
   const filtered = romaneios.filter(r => {
